@@ -112,7 +112,7 @@ namespace WinFormsLightBlueGlassDemo
             Color.FromArgb(80, 85, 110),
             Color.FromArgb(204, 10, 10, 15));
         private static readonly ThemePalette LightTheme = new(
-            Color.FromArgb(225, 230, 238),
+            Color.FromArgb(214, 226, 240),
             Color.FromArgb(255, 255, 255),
             Color.FromArgb(248, 250, 252),
             Color.FromArgb(215, 222, 235),
@@ -137,6 +137,7 @@ namespace WinFormsLightBlueGlassDemo
         {
             // 基础设置
             this.Text = "Glass Dashboard · 毛玻璃仪表板";
+            this.Text = string.Empty;
             this.Size = new Size(1280, 780);
             this.MinimumSize = new Size(1000, 600);
             this.StartPosition = FormStartPosition.CenterScreen;
@@ -164,9 +165,7 @@ namespace WinFormsLightBlueGlassDemo
         // ==================== 启用深色标题栏 (Win11优先) ====================
         private ThemePalette CurrentTheme => _isDarkTheme ? DarkTheme : LightTheme;
 
-        private Color MainAreaBackground => _isDarkTheme
-            ? CurrentTheme.Background
-            : Color.FromArgb(225, 230, 238);
+        private Color MainAreaBackground => CurrentTheme.Background;
 
         private void SetDarkTitleBar()
         {
@@ -327,7 +326,7 @@ namespace WinFormsLightBlueGlassDemo
 
                 using var borderPen = new Pen(_isDarkTheme
                     ? Color.FromArgb(45, 255, 255, 255)
-                    : CurrentTheme.Border, 1f);
+                    : Color.FromArgb(158, 172, 192), 1.2f);
                 g.DrawPath(borderPen, path);
 
                 using var font = new Font("Segoe UI Emoji", 14);
@@ -348,7 +347,7 @@ namespace WinFormsLightBlueGlassDemo
             sidebar.Controls.Add(_navIndicator);
 
             // 导航项（Unicode图标）
-            string[] icons = { "⬡", "📊", "⚡", "🔔", "⚙" };
+            string[] icons = { "🏠", "📊", "⚡", "🔔", "⚙" };
             string[] tips = { "首页", "数据", "性能", "通知", "设置" };
 
             for (int i = 0; i < icons.Length; i++)
@@ -479,7 +478,7 @@ namespace WinFormsLightBlueGlassDemo
 
                 using var borderPen = new Pen(_isDarkTheme
                     ? (isThemeHovered ? Color.FromArgb(80, 255, 255, 255) : Color.FromArgb(60, 255, 255, 255))
-                    : CurrentTheme.Border, 1.2f);
+                    : (isThemeHovered ? Color.FromArgb(144, 160, 184) : Color.FromArgb(158, 172, 192)), 1.2f);
                 g.DrawPath(borderPen, path);
 
                 string icon = _isDarkTheme ? "☀" : "☾";
@@ -510,16 +509,17 @@ namespace WinFormsLightBlueGlassDemo
                 g.DrawString("仪表板", titleFont, titleBrush, 10, 15);
 
                 // 副标题
-                using var subFont = new Font("Segoe UI", 11);
-                int subA = _isDarkTheme ? 155 : 220;
-                using var subBrush = new SolidBrush(Color.FromArgb((int)(alpha * subA), CurrentTheme.TextSecondary));
+                using var subFont = new Font("Segoe UI", 11, FontStyle.Regular);
+                int subA = _isDarkTheme ? 155 : 255;
+                Color headerTextColor = _isDarkTheme ? CurrentTheme.TextSecondary : Color.FromArgb(34, 44, 58);
+                using var subBrush = new SolidBrush(Color.FromArgb((int)(alpha * subA), headerTextColor));
                 g.DrawString("欢迎回来！这是你的系统概览。", subFont, subBrush, 12, 58);
 
                 // 右上角 - 时间显示
                 string timeStr = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
                 var timeSize = g.MeasureString(timeStr, subFont);
-                int timeA = _isDarkTheme ? 180 : 220;
-                using var timeBrush = new SolidBrush(Color.FromArgb((int)(alpha * timeA), CurrentTheme.TextSecondary));
+                int timeA = _isDarkTheme ? 180 : 255;
+                using var timeBrush = new SolidBrush(Color.FromArgb((int)(alpha * timeA), headerTextColor));
                 g.DrawString(timeStr, subFont, timeBrush, header.Width - timeSize.Width - 75, 23);
             };
 
