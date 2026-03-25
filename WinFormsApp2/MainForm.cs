@@ -131,7 +131,7 @@ namespace WinFormsLightBlueGlassDemo
         private Panel _navIndicator = null!;
         private Panel _sidebar = null!;
         private Panel _mainArea = null!;
-        private Button _themeToggleButton = null!;
+        private BufferedPanel _themeToggleButton = null!;
 
         public MainForm()
         {
@@ -270,14 +270,7 @@ namespace WinFormsLightBlueGlassDemo
             if (_themeToggleButton == null)
                 return;
 
-            _themeToggleButton.Text = _isDarkTheme ? "☀" : "☾";
-            _themeToggleButton.ForeColor = _isDarkTheme ? AccentOrange : AccentBlue;
-            _themeToggleButton.BackColor = _isDarkTheme
-                ? Color.FromArgb(28, 255, 255, 255)
-                : Color.FromArgb(246, 251, 255);
-            _themeToggleButton.FlatAppearance.BorderColor = _isDarkTheme
-                ? Color.FromArgb(55, 255, 255, 255)
-                : CurrentTheme.Border;
+            _themeToggleButton.Invalidate();
         }
 
         private void ToggleTheme()
@@ -415,6 +408,46 @@ namespace WinFormsLightBlueGlassDemo
                 sidebar.Controls.Add(navBtn);
             }
 
+
+            // 底部用户头像
+            var avatarPanel = new BufferedPanel
+            {
+                Size = new Size(40, 40),
+                BackColor = Color.Transparent,
+                Cursor = Cursors.Hand
+            };
+            avatarPanel.Paint += (s, e) =>
+            {
+                var g = e.Graphics;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
+
+                var rect = new Rectangle(0, 0, 39, 39);
+                var path = CreateRoundRectPath(rect, 19);
+
+                using var bgBrush = new SolidBrush(_isDarkTheme 
+                    ? Color.FromArgb(25, 255, 255, 255)
+                    : Color.FromArgb(235, 240, 245));
+                g.FillPath(bgBrush, path);
+
+                using var borderPen = new Pen(_isDarkTheme
+                    ? Color.FromArgb(45, 255, 255, 255)
+                    : CurrentTheme.Border, 1f);
+                g.DrawPath(borderPen, path);
+
+                using var font = new Font("Segoe UI Emoji", 14);
+                string icon = "👤"; 
+                using var textBrush = new SolidBrush(CurrentTheme.TextSecondary);
+                var ts = g.MeasureString(icon, font);
+                g.DrawString(icon, font, textBrush, (40 - ts.Width) / 2, (40 - ts.Height) / 2);
+            };
+            sidebar.Controls.Add(avatarPanel);
+            
+            sidebar.Resize += (s, e) =>
+            {
+                avatarPanel.Location = new Point((sidebar.Width - 40) / 2, sidebar.Height - 60);
+            };
+
             return sidebar;
         }
 
@@ -429,21 +462,43 @@ namespace WinFormsLightBlueGlassDemo
                 Padding = new Padding(10, 15, 10, 0)
             };
 
-            _themeToggleButton = new Button
+            _themeToggleButton = new BufferedPanel
             {
-                Size = new Size(34, 34),
-                FlatStyle = FlatStyle.Flat,
-                FlatAppearance = { BorderSize = 1 },
+                Size = new Size(40, 40),
                 Cursor = Cursors.Hand,
-                Font = new Font("Segoe UI Symbol", 11F, FontStyle.Regular),
-                TabStop = false,
-                UseVisualStyleBackColor = false
+                BackColor = Color.Transparent
             };
             _themeToggleButton.Click += (s, e) => ToggleTheme();
+            _themeToggleButton.Paint += (s, e) =>
+            {
+                var g = e.Graphics;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
+
+                var rect = new Rectangle(0, 0, 39, 39);
+                var path = CreateRoundRectPath(rect, 8);
+                
+                using var bgBrush = new SolidBrush(_isDarkTheme
+                    ? Color.FromArgb(40, 255, 255, 255)
+                    : Color.FromArgb(245, 250, 255));
+                g.FillPath(bgBrush, path);
+
+                using var borderPen = new Pen(_isDarkTheme
+                    ? Color.FromArgb(60, 255, 255, 255)
+                    : CurrentTheme.Border, 1.2f);
+                g.DrawPath(borderPen, path);
+
+                string icon = _isDarkTheme ? "☀" : "☾";
+                Color iconColor = _isDarkTheme ? AccentOrange : AccentBlue;
+                using var font = new Font("Segoe UI Symbol", 13F, FontStyle.Regular);
+                using var iconBrush = new SolidBrush(iconColor);
+                var ts = g.MeasureString(icon, font);
+                g.DrawString(icon, font, iconBrush, (40 - ts.Width) / 2 + 1, (40 - ts.Height) / 2 + 1);
+            };
             header.Controls.Add(_themeToggleButton);
             header.Resize += (s, e) =>
             {
-                _themeToggleButton.Location = new Point(header.Width - 98, 46);
+                _themeToggleButton.Location = new Point(header.Width - 55, 12);
             };
 
             header.Paint += (s, e) =>
@@ -469,20 +524,9 @@ namespace WinFormsLightBlueGlassDemo
                 // 右上角 - 时间显示
                 string timeStr = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
                 var timeSize = g.MeasureString(timeStr, subFont);
-                int timeA = _isDarkTheme ? 120 : 180;
+                int timeA = _isDarkTheme ? 180 : 220;
                 using var timeBrush = new SolidBrush(Color.FromArgb((int)(alpha * timeA), CurrentTheme.TextSecondary));
-                g.DrawString(timeStr, subFont, timeBrush, header.Width - timeSize.Width - 112, 20);
-
-                // 右上角 - 用户头像圈（纯色细描边，不用渐变）
-                int avatarX = header.Width - 50;
-                int avatarY = 48;
-                using var avatarPen = new Pen(_isDarkTheme
-                    ? Color.FromArgb(60, 255, 255, 255)
-                    : CurrentTheme.Border, 1.5f);
-                g.DrawEllipse(avatarPen, avatarX, avatarY, 32, 32);
-                using var avatarFont = new Font("Segoe UI", 11, FontStyle.Bold);
-                using var avatarTextBrush = new SolidBrush(CurrentTheme.TextSecondary);
-                g.DrawString("A", avatarFont, avatarTextBrush, avatarX + 9, avatarY + 6);
+                g.DrawString(timeStr, subFont, timeBrush, header.Width - timeSize.Width - 75, 23);
             };
 
             UpdateThemeToggleButton();
