@@ -91,36 +91,36 @@ namespace WinFormsLightBlueGlassDemo
         }
 
         // ==================== 颜色主题 ====================
-        private static readonly Color BgDark = Color.FromArgb(18, 18, 30);           // 主背景深蓝黑
-        private static readonly Color BgCard = Color.FromArgb(35, 35, 55);            // 卡片背景
-        private static readonly Color BgCardHover = Color.FromArgb(45, 45, 70);       // 卡片悬停
-        private static readonly Color BgSidebar = Color.FromArgb(22, 22, 38);         // 侧栏背景
-        private static readonly Color AccentBlue = Color.FromArgb(88, 130, 255);      // 主强调蓝
-        private static readonly Color AccentPurple = Color.FromArgb(148, 90, 255);    // 强调紫
-        private static readonly Color AccentCyan = Color.FromArgb(50, 210, 220);      // 强调青
-        private static readonly Color AccentGreen = Color.FromArgb(76, 217, 140);     // 强调绿
-        private static readonly Color AccentOrange = Color.FromArgb(255, 165, 70);    // 强调橙
-        private static readonly Color AccentPink = Color.FromArgb(255, 100, 150);     // 强调粉
+        private static readonly Color BgDark = Color.FromArgb(10, 10, 15);
+        private static readonly Color BgCard = Color.FromArgb(28, 30, 40);
+        private static readonly Color BgCardHover = Color.FromArgb(40, 42, 55);
+        private static readonly Color BgSidebar = Color.FromArgb(16, 16, 22);
+        private static readonly Color AccentBlue = Color.FromArgb(88, 130, 255);
+        private static readonly Color AccentPurple = Color.FromArgb(148, 90, 255);
+        private static readonly Color AccentCyan = Color.FromArgb(50, 210, 220);
+        private static readonly Color AccentGreen = Color.FromArgb(76, 217, 140);
+        private static readonly Color AccentOrange = Color.FromArgb(255, 165, 70);
+        private static readonly Color AccentPink = Color.FromArgb(255, 100, 150);
         private static readonly ThemePalette DarkTheme = new(
             BgDark,
             BgCard,
             BgCardHover,
             BgSidebar,
-            Color.FromArgb(235, 235, 245),
-            Color.FromArgb(155, 155, 175),
-            Color.FromArgb(95, 95, 115),
-            Color.FromArgb(50, 50, 75),
-            Color.FromArgb(204, 18, 18, 30));
+            Color.FromArgb(255, 255, 255),
+            Color.FromArgb(210, 215, 230),
+            Color.FromArgb(160, 170, 190),
+            Color.FromArgb(80, 85, 110),
+            Color.FromArgb(204, 10, 10, 15));
         private static readonly ThemePalette LightTheme = new(
-            Color.FromArgb(235, 240, 245),
+            Color.FromArgb(225, 230, 238),
             Color.FromArgb(255, 255, 255),
             Color.FromArgb(248, 250, 252),
-            Color.FromArgb(226, 233, 240),
-            Color.FromArgb(20, 25, 35),
-            Color.FromArgb(70, 80, 95),
-            Color.FromArgb(110, 120, 135),
-            Color.FromArgb(180, 195, 215),
-            Color.FromArgb(150, 235, 240, 245));
+            Color.FromArgb(215, 222, 235),
+            Color.FromArgb(0, 0, 0),
+            Color.FromArgb(40, 45, 50),
+            Color.FromArgb(90, 100, 115),
+            Color.FromArgb(150, 160, 180),
+            Color.FromArgb(110, 225, 230, 238));
 
         // ==================== 动画相关 ====================
         private System.Windows.Forms.Timer _animTimer = null!;
@@ -166,7 +166,7 @@ namespace WinFormsLightBlueGlassDemo
 
         private Color MainAreaBackground => _isDarkTheme
             ? CurrentTheme.Background
-            : Color.FromArgb(242, 245, 250);
+            : Color.FromArgb(225, 230, 238);
 
         private void SetDarkTitleBar()
         {
@@ -192,7 +192,7 @@ namespace WinFormsLightBlueGlassDemo
                 // AccentState = 3 → ACCENT_ENABLE_BLURBEHIND (Win10 fallback)
                 var accent = new AccentPolicy
                 {
-                    AccentState = 4,
+                    AccentState = 3,
                     AccentFlags = 2,
                     GradientColor = ToAbgr(CurrentTheme.Glass)
                 };
@@ -533,11 +533,13 @@ namespace WinFormsLightBlueGlassDemo
                     var rect = new Rectangle(x, y + offsetY, cardWidth, cardHeight);
                     if (!_isDarkTheme)
                         DrawLightSurfaceShadow(g, rect, 16);
+                    else
+                        DrawDarkSurfaceShadow(g, rect, 16);
 
                     // 玻璃卡片背景
                     var cardPath = CreateRoundRectPath(rect, 16);
                     using var cardBrush = new SolidBrush(_isDarkTheme
-                        ? Color.FromArgb(Math.Min(255, (int)(eased * 180)), CurrentTheme.Card)
+                        ? Color.FromArgb(Math.Min(255, (int)(eased * 255)), CurrentTheme.Card)
                         : CurrentTheme.Card);
                     g.FillPath(cardBrush, cardPath);
 
@@ -546,12 +548,12 @@ namespace WinFormsLightBlueGlassDemo
                     var topBarPath = CreateRoundRectPath(topBarRect, 2);
                     using var accentBrush = new LinearGradientBrush(topBarRect,
                         Color.FromArgb(Math.Min(255, alpha), cardData[i].Color),
-                        Color.FromArgb(Math.Min(255, alpha / 2), cardData[i].Color), 0f);
+                        Color.FromArgb(Math.Min(150, alpha / 2), cardData[i].Color), 0f);
                     g.FillPath(accentBrush, topBarPath);
 
                     // 边框（微弱发光）
                     using var borderPen = new Pen(_isDarkTheme
-                        ? Color.FromArgb(Math.Min(30, alpha / 8), 255, 255, 255)
+                        ? Color.FromArgb(Math.Min(80, alpha / 3), 255, 255, 255)
                         : CurrentTheme.Border, 1.2f);
                     g.DrawPath(borderPen, cardPath);
 
@@ -561,8 +563,8 @@ namespace WinFormsLightBlueGlassDemo
                     int iconBgSize = 40;
                     var iconBgRect = new Rectangle(rect.X + 20, rect.Y + 22, iconBgSize, iconBgSize);
                     using var iconBgBrush = new SolidBrush(_isDarkTheme
-                        ? Color.FromArgb(Math.Min(30, alpha / 8), cardData[i].Color)
-                        : Color.FromArgb(28, cardData[i].Color));
+                        ? Color.FromArgb(Math.Min(50, alpha / 5), cardData[i].Color)
+                        : Color.FromArgb(35, cardData[i].Color));
                     var iconBgPath = CreateRoundRectPath(iconBgRect, 12);
                     g.FillPath(iconBgBrush, iconBgPath);
 
@@ -573,17 +575,17 @@ namespace WinFormsLightBlueGlassDemo
 
                     // 数值
                     using var valueFont = new Font("Segoe UI", 22, FontStyle.Bold);
-                    using var valueBrush = new SolidBrush(Color.FromArgb(_isDarkTheme ? Math.Min(235, alpha) : Math.Min(255, alpha), CurrentTheme.TextPrimary));
+                    using var valueBrush = new SolidBrush(Color.FromArgb(Math.Min(255, alpha), CurrentTheme.TextPrimary));
                     g.DrawString(cardData[i].Value, valueFont, valueBrush, rect.X + 20, rect.Y + 72);
 
                     // 标题
                     using var labelFont = new Font("Segoe UI", 9);
-                    using var labelBrush = new SolidBrush(Color.FromArgb(_isDarkTheme ? Math.Min(155, alpha) : Math.Min(220, alpha), CurrentTheme.TextSecondary));
+                    using var labelBrush = new SolidBrush(Color.FromArgb(_isDarkTheme ? Math.Min(230, alpha) : Math.Min(255, alpha), CurrentTheme.TextSecondary));
                     g.DrawString(cardData[i].Title, labelFont, labelBrush, rect.X + 20, rect.Y + 108);
 
                     // 子文本
                     using var subFont = new Font("Segoe UI", 8);
-                    using var subBrush = new SolidBrush(Color.FromArgb(_isDarkTheme ? Math.Min(140, alpha) : Math.Min(200, alpha), cardData[i].Color));
+                    using var subBrush = new SolidBrush(Color.FromArgb(Math.Min(255, alpha), cardData[i].Color));
                     g.DrawString(cardData[i].Sub, subFont, subBrush, rect.X + 20, rect.Y + 126);
                 }
             };
@@ -621,13 +623,15 @@ namespace WinFormsLightBlueGlassDemo
                 var leftRect = new Rectangle(10, 10, leftW, panelH);
                 if (!_isDarkTheme)
                     DrawLightSurfaceShadow(g, leftRect, 16);
+                else
+                    DrawDarkSurfaceShadow(g, leftRect, 16);
                 var leftPath = CreateRoundRectPath(leftRect, 16);
                 using (var bgBrush = new SolidBrush(_isDarkTheme
-                    ? Color.FromArgb(Math.Min(210, (int)(eased * 180)), CurrentTheme.Card)
+                    ? Color.FromArgb(Math.Min(255, (int)(eased * 255)), CurrentTheme.Card)
                     : CurrentTheme.Card))
                     g.FillPath(bgBrush, leftPath);
                 using (var borderPen = new Pen(_isDarkTheme
-                    ? Color.FromArgb(Math.Min(25, alpha / 10), 255, 255, 255)
+                    ? Color.FromArgb(Math.Min(80, alpha / 3), 255, 255, 255)
                     : CurrentTheme.Border, 1.2f))
                     g.DrawPath(borderPen, leftPath);
 
@@ -703,13 +707,15 @@ namespace WinFormsLightBlueGlassDemo
                 var rightRect = new Rectangle(10 + leftW + 15, 10, rightW, panelH);
                 if (!_isDarkTheme)
                     DrawLightSurfaceShadow(g, rightRect, 16);
+                else
+                    DrawDarkSurfaceShadow(g, rightRect, 16);
                 var rightPath = CreateRoundRectPath(rightRect, 16);
                 using (var bgBrush = new SolidBrush(_isDarkTheme
-                    ? Color.FromArgb(Math.Min(210, (int)(eased * 180)), CurrentTheme.Card)
+                    ? Color.FromArgb(Math.Min(255, (int)(eased * 255)), CurrentTheme.Card)
                     : CurrentTheme.Card))
                     g.FillPath(bgBrush, rightPath);
                 using (var borderPen = new Pen(_isDarkTheme
-                    ? Color.FromArgb(Math.Min(25, alpha / 10), 255, 255, 255)
+                    ? Color.FromArgb(Math.Min(80, alpha / 3), 255, 255, 255)
                     : CurrentTheme.Border, 1.2f))
                     g.DrawPath(borderPen, rightPath);
 
@@ -845,6 +851,16 @@ namespace WinFormsLightBlueGlassDemo
             using var ambientPath = CreateRoundRectPath(ambientRect, radius + 1);
             using var ambientBrush = new SolidBrush(Color.FromArgb(12, 255, 255, 255));
             g.FillPath(ambientBrush, ambientPath);
+        }
+
+        private static void DrawDarkSurfaceShadow(Graphics g, Rectangle rect, int radius)
+        {
+            var shadowRect = rect;
+            shadowRect.Offset(0, 8);
+            shadowRect.Inflate(2, 4);
+            using var shadowPath = CreateRoundRectPath(shadowRect, radius + 2);
+            using var shadowBrush = new SolidBrush(Color.FromArgb(90, 0, 0, 0));
+            g.FillPath(shadowBrush, shadowPath);
         }
 
         private static void InvalidateControlTree(Control root)
