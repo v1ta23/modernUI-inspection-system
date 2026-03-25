@@ -13,3 +13,15 @@ D:\jetbrains\c#\WinFormsApp2\App.Infrastructure\obj\Debug\net8.0\App.Infrastruct
 D:\jetbrains\c#\WinFormsApp2\App.Infrastructure\obj\Debug\net8.0\refint\App.Infrastructure.dll
 D:\jetbrains\c#\WinFormsApp2\App.Infrastructure\obj\Debug\net8.0\App.Infrastructure.pdb
 D:\jetbrains\c#\WinFormsApp2\App.Infrastructure\obj\Debug\net8.0\ref\App.Infrastructure.dll
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build\Debug\net8.0\App.Infrastructure.deps.json
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build\Debug\net8.0\App.Infrastructure.dll
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build\Debug\net8.0\App.Infrastructure.pdb
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-mainfix\Debug\net8.0\App.Infrastructure.deps.json
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-mainfix\Debug\net8.0\App.Infrastructure.dll
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-mainfix\Debug\net8.0\App.Infrastructure.pdb
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-center\Debug\net8.0\App.Infrastructure.deps.json
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-center\Debug\net8.0\App.Infrastructure.dll
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-center\Debug\net8.0\App.Infrastructure.pdb
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-lighttheme\Debug\net8.0\App.Infrastructure.deps.json
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-lighttheme\Debug\net8.0\App.Infrastructure.dll
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-lighttheme\Debug\net8.0\App.Infrastructure.pdb

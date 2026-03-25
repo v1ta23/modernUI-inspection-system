@@ -147,23 +147,7 @@ internal sealed class LoginForm : Form
             Location = new Point(18, 16),
             Text = "\u767b\u5f55\u5165\u53e3"
         };
-        var helper = new Label
-        {
-            AutoSize = true,
-            Anchor = AnchorStyles.Top | AnchorStyles.Right,
-            Font = new Font("Microsoft YaHei UI", 9F),
-            ForeColor = TextSecondary,
-            Text = "AliceBlue acrylic accent"
-        };
-
         band.Controls.Add(title);
-        band.Controls.Add(helper);
-        band.Resize += (_, _) =>
-        {
-            helper.Location = new Point(
-                Math.Max(18, band.ClientSize.Width - helper.PreferredWidth - 18),
-                17);
-        };
         return band;
     }
 

@@ -9,3 +9,15 @@ D:\jetbrains\c#\WinFormsApp2\App.Core\obj\Debug\net8.0\App.Core.dll
 D:\jetbrains\c#\WinFormsApp2\App.Core\obj\Debug\net8.0\refint\App.Core.dll
 D:\jetbrains\c#\WinFormsApp2\App.Core\obj\Debug\net8.0\App.Core.pdb
 D:\jetbrains\c#\WinFormsApp2\App.Core\obj\Debug\net8.0\ref\App.Core.dll
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build\Debug\net8.0\App.Core.deps.json
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build\Debug\net8.0\App.Core.dll
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build\Debug\net8.0\App.Core.pdb
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-mainfix\Debug\net8.0\App.Core.deps.json
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-mainfix\Debug\net8.0\App.Core.dll
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-mainfix\Debug\net8.0\App.Core.pdb
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-center\Debug\net8.0\App.Core.deps.json
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-center\Debug\net8.0\App.Core.dll
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-center\Debug\net8.0\App.Core.pdb
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-lighttheme\Debug\net8.0\App.Core.deps.json
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-lighttheme\Debug\net8.0\App.Core.dll
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-lighttheme\Debug\net8.0\App.Core.pdb

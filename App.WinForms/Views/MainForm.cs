@@ -143,13 +143,13 @@ namespace App.WinForms.Views
             // 基础设置
             this.Text = "Glass Dashboard · 毛玻璃仪表板";
             this.Text = string.Empty;
-            this.Size = new Size(1280, 780);
-            this.MinimumSize = new Size(1000, 600);
+            this.Size = new Size(1440, 900);
+            this.MinimumSize = new Size(1180, 720);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.Sizable;
             this.BackColor = CurrentTheme.Background;
             this.DoubleBuffered = true;
-            this.Font = new Font("Segoe UI", 9F);
+            this.Font = new Font("Microsoft YaHei UI", 9F);
             SetStyle(
                 ControlStyles.AllPaintingInWmPaint |
                 ControlStyles.OptimizedDoubleBuffer |
@@ -439,9 +439,9 @@ namespace App.WinForms.Views
             var header = new BufferedPanel
             {
                 Dock = DockStyle.Top,
-                Height = 100,
+                Height = 120,
                 BackColor = Color.Transparent,
-                Padding = new Padding(10, 15, 10, 0)
+                Padding = new Padding(10, 18, 10, 0)
             };
 
             _themeToggleButton = new BufferedPanel
@@ -508,24 +508,29 @@ namespace App.WinForms.Views
                 float alpha = Math.Min(1f, _animProgress * 2f);
 
                 // 标题
-                using var titleFont = new Font("Segoe UI", 26, FontStyle.Bold);
+                using var titleFont = new Font("Microsoft YaHei UI", 24, FontStyle.Bold);
+                using var subFont = new Font("Microsoft YaHei UI", 11, FontStyle.Regular);
                 int titleA = _isDarkTheme ? 235 : 255;
-                using var titleBrush = new SolidBrush(Color.FromArgb((int)(alpha * titleA), CurrentTheme.TextPrimary));
-                g.DrawString(_dashboard.HeaderTitle, titleFont, titleBrush, 10, 15);
-
-                // 副标题
-                using var subFont = new Font("Segoe UI", 11, FontStyle.Regular);
                 int subA = _isDarkTheme ? 155 : 255;
                 Color headerTextColor = _isDarkTheme ? CurrentTheme.TextSecondary : Color.FromArgb(34, 44, 58);
-                using var subBrush = new SolidBrush(Color.FromArgb((int)(alpha * subA), headerTextColor));
-                g.DrawString(_dashboard.HeaderSubtitle, subFont, subBrush, 12, 58);
+                var titleColor = Color.FromArgb((int)(alpha * titleA), CurrentTheme.TextPrimary);
+                var subtitleColor = Color.FromArgb((int)(alpha * subA), headerTextColor);
 
                 // 右上角 - 时间显示
                 string timeStr = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
                 var timeSize = g.MeasureString(timeStr, subFont);
                 int timeA = _isDarkTheme ? 180 : 255;
                 using var timeBrush = new SolidBrush(Color.FromArgb((int)(alpha * timeA), headerTextColor));
-                g.DrawString(timeStr, subFont, timeBrush, header.Width - timeSize.Width - 75, 23);
+                var timeX = header.Width - timeSize.Width - 75;
+                g.DrawString(timeStr, subFont, timeBrush, timeX, 24);
+
+                var titleRect = new RectangleF(10, 10, Math.Max(240, timeX - 28), 44);
+                var subtitleRect = new RectangleF(12, 60, Math.Max(240, timeX - 30), 28);
+                using var titleBrush = new SolidBrush(titleColor);
+                using var subtitleBrush = new SolidBrush(subtitleColor);
+                using var headerTextFormat = CreateSingleLineTextFormat();
+                g.DrawString(_dashboard.HeaderTitle, titleFont, titleBrush, titleRect, headerTextFormat);
+                g.DrawString(_dashboard.HeaderSubtitle, subFont, subtitleBrush, subtitleRect, headerTextFormat);
             };
 
             UpdateThemeToggleButton();
@@ -538,7 +543,7 @@ namespace App.WinForms.Views
             var container = new BufferedPanel
             {
                 Dock = DockStyle.Top,
-                Height = 190,
+                Height = 208,
                 BackColor = Color.Transparent,
                 Padding = new Padding(0, 10, 0, 10)
             };
@@ -554,7 +559,7 @@ namespace App.WinForms.Views
                 int cardCount = Math.Max(1, cardData.Count);
                 int totalWidth = container.Width - 20;
                 int cardWidth = (totalWidth - 15 * (cardCount - 1)) / cardCount;
-                int cardHeight = 150;
+                int cardHeight = 168;
                 int y = 15;
 
                 for (int i = 0; i < cardData.Count; i++)
@@ -601,20 +606,26 @@ namespace App.WinForms.Views
                     using var iconBrush = new SolidBrush(Color.FromArgb(Math.Min(255, alpha), cardData[i].AccentColor));
                     g.DrawString(cardData[i].Icon, iconFont, iconBrush, rect.X + 28, rect.Y + 30);
 
-                    // 数值
+                    // 数值与说明按固定文本区域绘制，避免中文字体高度变化时互相重叠
                     using var valueFont = new Font("Segoe UI", 22, FontStyle.Bold);
-                    using var valueBrush = new SolidBrush(Color.FromArgb(Math.Min(255, alpha), CurrentTheme.TextPrimary));
-                    g.DrawString(cardData[i].Value, valueFont, valueBrush, rect.X + 20, rect.Y + 72);
+                    using var labelFont = new Font("Microsoft YaHei UI", 9.5F, FontStyle.Regular);
+                    using var subFont = new Font("Microsoft YaHei UI", 8.5F, FontStyle.Regular);
 
-                    // 标题
-                    using var labelFont = new Font("Segoe UI", 9);
-                    using var labelBrush = new SolidBrush(Color.FromArgb(_isDarkTheme ? Math.Min(230, alpha) : Math.Min(255, alpha), CurrentTheme.TextSecondary));
-                    g.DrawString(cardData[i].Title, labelFont, labelBrush, rect.X + 20, rect.Y + 108);
+                    var contentWidth = rect.Width - 40;
+                    var valueRect = new RectangleF(rect.X + 20, rect.Y + 68, contentWidth, 40);
+                    var titleRect = new RectangleF(rect.X + 20, rect.Y + 108, contentWidth, 24);
+                    var detailRect = new RectangleF(rect.X + 20, rect.Y + 130, contentWidth, 22);
+                    var valueColor = Color.FromArgb(Math.Min(255, alpha), CurrentTheme.TextPrimary);
+                    var labelColor = Color.FromArgb(_isDarkTheme ? Math.Min(230, alpha) : Math.Min(255, alpha), CurrentTheme.TextSecondary);
+                    var detailColor = Color.FromArgb(Math.Min(255, alpha), cardData[i].AccentColor);
 
-                    // 子文本
-                    using var subFont = new Font("Segoe UI", 8);
-                    using var subBrush = new SolidBrush(Color.FromArgb(Math.Min(255, alpha), cardData[i].AccentColor));
-                    g.DrawString(cardData[i].Detail, subFont, subBrush, rect.X + 20, rect.Y + 126);
+                    using var valueBrush = new SolidBrush(valueColor);
+                    using var labelBrush = new SolidBrush(labelColor);
+                    using var detailBrush = new SolidBrush(detailColor);
+                    using var cardTextFormat = CreateSingleLineTextFormat();
+                    g.DrawString(cardData[i].Value, valueFont, valueBrush, valueRect, cardTextFormat);
+                    g.DrawString(cardData[i].Title, labelFont, labelBrush, titleRect, cardTextFormat);
+                    g.DrawString(cardData[i].Detail, subFont, detailBrush, detailRect, cardTextFormat);
                 }
             };
 
@@ -943,6 +954,17 @@ namespace App.WinForms.Views
         private static float EaseOutCubic(float t)
         {
             return 1 - (float)Math.Pow(1 - t, 3);
+        }
+
+        private static StringFormat CreateSingleLineTextFormat()
+        {
+            return new StringFormat
+            {
+                Alignment = StringAlignment.Near,
+                LineAlignment = StringAlignment.Center,
+                Trimming = StringTrimming.EllipsisCharacter,
+                FormatFlags = StringFormatFlags.NoWrap
+            };
         }
 
         // 双缓冲减少闪烁
