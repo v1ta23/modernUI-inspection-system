@@ -25,3 +25,12 @@ D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-center\Debug\net8.0\App.Infr
 D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-lighttheme\Debug\net8.0\App.Infrastructure.deps.json
 D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-lighttheme\Debug\net8.0\App.Infrastructure.dll
 D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-lighttheme\Debug\net8.0\App.Infrastructure.pdb
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-loginstyle\Debug\net8.0\App.Infrastructure.deps.json
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-loginstyle\Debug\net8.0\App.Infrastructure.dll
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-loginstyle\Debug\net8.0\App.Infrastructure.pdb
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-logintrim\Debug\net8.0\App.Infrastructure.deps.json
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-logintrim\Debug\net8.0\App.Infrastructure.dll
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-logintrim\Debug\net8.0\App.Infrastructure.pdb
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-loginperf\Debug\net8.0\App.Infrastructure.deps.json
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-loginperf\Debug\net8.0\App.Infrastructure.dll
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-loginperf\Debug\net8.0\App.Infrastructure.pdb

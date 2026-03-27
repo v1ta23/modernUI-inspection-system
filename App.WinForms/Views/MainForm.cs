@@ -26,6 +26,9 @@ namespace App.WinForms.Views
 
     internal partial class MainForm : Form
     {
+        private const int WmSizing = 0x0214;
+        private const int WmExitSizeMove = 0x0232;
+
         private readonly DashboardViewModel _dashboard;
 
         private readonly struct ThemePalette
@@ -131,6 +134,7 @@ namespace App.WinForms.Views
         private int _activeNavIndex = 0;
         private readonly List<Panel> _navItems = new List<Panel>();
         private bool _isDarkTheme = true;
+        private bool _windowEffectsSuspended;
         private Panel _navIndicator = null!;
         private Panel _sidebar = null!;
         private Panel _mainArea = null!;
@@ -165,6 +169,21 @@ namespace App.WinForms.Views
             _animTimer = new System.Windows.Forms.Timer { Interval = 16 };
             _animTimer.Tick += OnAnimTick;
             _animTimer.Start();
+        }
+
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == WmSizing)
+            {
+                SuspendWindowEffects();
+            }
+
+            base.WndProc(ref m);
+
+            if (m.Msg == WmExitSizeMove)
+            {
+                ResumeWindowEffects();
+            }
         }
 
         // ==================== 启用深色标题栏 (Win11优先) ====================
@@ -218,6 +237,57 @@ namespace App.WinForms.Views
             catch { /* 降级处理 */ }
         }
 
+        private void DisableAcrylicBlur()
+        {
+            try
+            {
+                var accent = new AccentPolicy
+                {
+                    AccentState = 0,
+                    AccentFlags = 2,
+                    GradientColor = 0
+                };
+
+                int accentSize = Marshal.SizeOf(accent);
+                IntPtr accentPtr = Marshal.AllocHGlobal(accentSize);
+                Marshal.StructureToPtr(accent, accentPtr, false);
+
+                var data = new WindowCompositionAttributeData
+                {
+                    Attribute = 19,
+                    Data = accentPtr,
+                    SizeOfData = accentSize
+                };
+
+                SetWindowCompositionAttribute(this.Handle, ref data);
+                Marshal.FreeHGlobal(accentPtr);
+            }
+            catch { }
+        }
+
+        private void SuspendWindowEffects()
+        {
+            if (_windowEffectsSuspended || !IsHandleCreated)
+            {
+                return;
+            }
+
+            _windowEffectsSuspended = true;
+            DisableAcrylicBlur();
+        }
+
+        private void ResumeWindowEffects()
+        {
+            if (!_windowEffectsSuspended || !IsHandleCreated)
+            {
+                return;
+            }
+
+            _windowEffectsSuspended = false;
+            SetDarkTitleBar();
+            EnableAcrylicBlur();
+        }
+
         // ==================== 构建主布局 ====================
         private void BuildLayout()
         {
@@ -264,7 +334,8 @@ namespace App.WinForms.Views
                 _sidebar.BackColor = theme.Sidebar;
 
             SetDarkTitleBar();
-            EnableAcrylicBlur();
+            if (!_windowEffectsSuspended)
+                EnableAcrylicBlur();
             UpdateThemeToggleButton();
             InvalidateControlTree(this);
         }

@@ -21,3 +21,12 @@ D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-center\Debug\net8.0\App.Core
 D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-lighttheme\Debug\net8.0\App.Core.deps.json
 D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-lighttheme\Debug\net8.0\App.Core.dll
 D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-lighttheme\Debug\net8.0\App.Core.pdb
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-loginstyle\Debug\net8.0\App.Core.deps.json
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-loginstyle\Debug\net8.0\App.Core.dll
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-loginstyle\Debug\net8.0\App.Core.pdb
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-logintrim\Debug\net8.0\App.Core.deps.json
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-logintrim\Debug\net8.0\App.Core.dll
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-logintrim\Debug\net8.0\App.Core.pdb
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-loginperf\Debug\net8.0\App.Core.deps.json
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-loginperf\Debug\net8.0\App.Core.dll
+D:\jetbrains\c#\WinFormsApp2\artifacts\verify-build-loginperf\Debug\net8.0\App.Core.pdb
