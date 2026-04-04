@@ -1,3 +1,4 @@
+using App.WinForms.Controllers;
 using App.WinForms.ViewModels;
 using System;
 using System.Collections.Generic;
@@ -30,6 +31,7 @@ namespace App.WinForms.Views
         private const int WmExitSizeMove = 0x0232;
 
         private readonly DashboardViewModel _dashboard;
+        private readonly InspectionPageControl _inspectionPage;
 
         private readonly struct ThemePalette
         {
@@ -134,15 +136,24 @@ namespace App.WinForms.Views
         private int _activeNavIndex = 0;
         private readonly List<Panel> _navItems = new List<Panel>();
         private bool _isDarkTheme = true;
+        private bool _isInteractiveResize;
         private bool _windowEffectsSuspended;
         private Panel _navIndicator = null!;
         private Panel _sidebar = null!;
         private Panel _mainArea = null!;
+        private Panel _homeView = null!;
         private BufferedPanel _themeToggleButton = null!;
 
-        public MainForm(DashboardViewModel dashboard)
+        public MainForm(
+            DashboardViewModel dashboard,
+            InspectionController inspectionController,
+            string account)
         {
             _dashboard = dashboard;
+            _inspectionPage = new InspectionPageControl(account, inspectionController)
+            {
+                Visible = false
+            };
 
             // 基础设置
             this.Text = "Glass Dashboard · 毛玻璃仪表板";
@@ -175,14 +186,14 @@ namespace App.WinForms.Views
         {
             if (m.Msg == WmSizing)
             {
-                SuspendWindowEffects();
+                BeginInteractiveResize();
             }
 
             base.WndProc(ref m);
 
             if (m.Msg == WmExitSizeMove)
             {
-                ResumeWindowEffects();
+                EndInteractiveResize();
             }
         }
 
@@ -288,12 +299,52 @@ namespace App.WinForms.Views
             EnableAcrylicBlur();
         }
 
+        private void BeginInteractiveResize()
+        {
+            if (_isInteractiveResize)
+            {
+                return;
+            }
+
+            _isInteractiveResize = true;
+            if (_animTimer.Enabled)
+            {
+                _animTimer.Stop();
+            }
+
+            if (_inspectionPage.Visible)
+            {
+                _inspectionPage.BeginInteractiveResize();
+            }
+        }
+
+        private void EndInteractiveResize()
+        {
+            if (!_isInteractiveResize)
+            {
+                return;
+            }
+
+            _isInteractiveResize = false;
+            if (_inspectionPage.Visible)
+            {
+                _inspectionPage.EndInteractiveResize();
+            }
+
+            Invalidate(true);
+        }
+
+        private void SetResizeRedrawEnabled(bool enabled)
+        {
+            SetStyle(ControlStyles.ResizeRedraw, enabled);
+            UpdateStyles();
+        }
+
         // ==================== 构建主布局 ====================
         private void BuildLayout()
         {
             SuspendLayout();
 
-            // 右侧主区域（先添加 Fill，再添加 Left，WinForms 按逆序 Dock）
             var mainArea = new BufferedPanel
             {
                 Dock = DockStyle.Fill,
@@ -302,22 +353,27 @@ namespace App.WinForms.Views
             };
             _mainArea = mainArea;
 
-            // 底部内容区（Fill 面板要最先加入 mainArea）
             mainArea.SuspendLayout();
+            var homeView = new BufferedPanel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.Transparent
+            };
+            _homeView = homeView;
+
             var bottomPanel = CreateBottomArea();
-            mainArea.Controls.Add(bottomPanel);
-
-            // 统计卡片区
             var cardsPanel = CreateCardsArea();
-            mainArea.Controls.Add(cardsPanel);
-
-            // 顶部标题区
             var headerPanel = CreateHeader();
-            mainArea.Controls.Add(headerPanel);
+            homeView.Controls.Add(bottomPanel);
+            homeView.Controls.Add(cardsPanel);
+            homeView.Controls.Add(headerPanel);
+
+            _inspectionPage.Dock = DockStyle.Fill;
+            mainArea.Controls.Add(_inspectionPage);
+            mainArea.Controls.Add(homeView);
 
             this.Controls.Add(mainArea);
 
-            // 左侧导航栏（后添加 → Dock 优先级更高 → 不被遮挡）
             var sidebar = CreateSidebar();
             this.Controls.Add(sidebar);
             mainArea.ResumeLayout(false);
@@ -336,6 +392,8 @@ namespace App.WinForms.Views
             SetDarkTitleBar();
             if (!_windowEffectsSuspended)
                 EnableAcrylicBlur();
+            
+            _inspectionPage?.ApplyTheme(_isDarkTheme);
             UpdateThemeToggleButton();
             InvalidateControlTree(this);
         }
@@ -352,6 +410,25 @@ namespace App.WinForms.Views
         {
             _isDarkTheme = !_isDarkTheme;
             ApplyTheme();
+        }
+
+        private void SwitchSection(int index)
+        {
+            var showInspection = index == 1;
+            if (_homeView != null)
+            {
+                _homeView.Visible = !showInspection;
+            }
+
+            if (_inspectionPage != null)
+            {
+                _inspectionPage.Visible = showInspection;
+                if (showInspection)
+                {
+                    _inspectionPage.EndInteractiveResize();
+                    _inspectionPage.RefreshData();
+                }
+            }
         }
 
         // ==================== 侧栏 ====================
@@ -423,8 +500,8 @@ namespace App.WinForms.Views
             sidebar.Controls.Add(_navIndicator);
 
             // 导航项（Unicode图标）
-            string[] icons = { "🏠", "📊", "⚡", "🔔", "⚙" };
-            string[] tips = { "首页", "数据", "性能", "通知", "设置" };
+            string[] icons = { "🏠", "📝", "⚡", "🔔", "⚙" };
+            string[] tips = { "首页", "点检记录", "性能", "通知", "设置" };
 
             for (int i = 0; i < icons.Length; i++)
             {
@@ -490,6 +567,7 @@ namespace App.WinForms.Views
                 {
                     _activeNavIndex = idx;
                     _navIndicator.Location = new Point(0, 70 + idx * 52 + 8);
+                    SwitchSection(idx);
                     foreach (var item in _navItems)
                         item.Invalidate();
                 };
