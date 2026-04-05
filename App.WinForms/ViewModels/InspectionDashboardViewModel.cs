@@ -6,6 +6,8 @@ internal sealed class InspectionDashboardViewModel
 {
     public IReadOnlyList<string> LineOptions { get; init; } = Array.Empty<string>();
 
+    public IReadOnlyList<InspectionTemplateViewModel> Templates { get; init; } = Array.Empty<InspectionTemplateViewModel>();
+
     public IReadOnlyList<InspectionRecordViewModel> Records { get; init; } = Array.Empty<InspectionRecordViewModel>();
 
     public IReadOnlyList<InspectionTrendPointViewModel> TrendPoints { get; init; } = Array.Empty<InspectionTrendPointViewModel>();
@@ -25,6 +27,16 @@ internal sealed class InspectionDashboardViewModel
 
 internal sealed class InspectionRecordViewModel
 {
+    public Guid Id { get; init; }
+
+    public InspectionStatus Status { get; init; }
+
+    public bool IsClosed { get; init; }
+
+    public bool IsRevoked { get; init; }
+
+    public DateTime CheckedAtValue { get; init; }
+
     public string CheckedAt { get; init; } = string.Empty;
 
     public string LineName { get; init; } = string.Empty;
@@ -37,9 +49,32 @@ internal sealed class InspectionRecordViewModel
 
     public string StatusText { get; init; } = string.Empty;
 
+    public decimal MeasuredValue { get; init; }
+
     public string MeasuredValueText { get; init; } = string.Empty;
 
     public string Remark { get; init; } = string.Empty;
+
+    public string ClosureStateText { get; init; } = string.Empty;
+
+    public string ActionRemark { get; init; } = string.Empty;
+}
+
+internal sealed class InspectionTemplateViewModel
+{
+    public Guid Id { get; init; }
+
+    public string DisplayText { get; init; } = string.Empty;
+
+    public string LineName { get; init; } = string.Empty;
+
+    public string DeviceName { get; init; } = string.Empty;
+
+    public string InspectionItem { get; init; } = string.Empty;
+
+    public string DefaultInspector { get; init; } = string.Empty;
+
+    public string DefaultRemark { get; init; } = string.Empty;
 }
 
 internal sealed class InspectionTrendPointViewModel
@@ -59,11 +94,15 @@ internal sealed class InspectionFilterViewModel
 
     public string LineName { get; init; } = string.Empty;
 
+    public string DeviceName { get; init; } = string.Empty;
+
     public InspectionStatus? Status { get; init; }
 
     public DateTime? StartTime { get; init; }
 
     public DateTime? EndTime { get; init; }
+
+    public bool IncludeRevoked { get; init; }
 }
 
 internal sealed class InspectionEntryViewModel

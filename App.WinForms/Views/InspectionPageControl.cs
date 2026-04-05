@@ -8,7 +8,7 @@ namespace App.WinForms.Views;
 
 internal sealed partial class InspectionPageControl : UserControl
 {
-    private static Color PageBackground = Color.FromArgb(10, 10, 15);
+    private static Color PageBackground = Color.FromArgb(16, 19, 27);
     private static Color SurfaceBackground = Color.FromArgb(28, 30, 40);
     private static Color SurfaceBorder = Color.FromArgb(80, 85, 110);
     private static Color InputBackground = Color.FromArgb(18, 22, 30);
@@ -21,6 +21,7 @@ internal sealed partial class InspectionPageControl : UserControl
     private readonly string _account;
 
     private readonly ComboBox _entryLineCombo;
+    private readonly ComboBox _entryTemplateCombo;
     private readonly TextBox _entryDeviceTextBox;
     private readonly TextBox _entryItemTextBox;
     private readonly TextBox _entryInspectorTextBox;
@@ -31,14 +32,18 @@ internal sealed partial class InspectionPageControl : UserControl
     private readonly Label _entryFeedbackLabel;
 
     private readonly TextBox _filterKeywordTextBox;
+    private readonly TextBox _filterDeviceTextBox;
     private readonly ComboBox _filterLineCombo;
     private readonly ComboBox _filterStatusCombo;
+    private readonly CheckBox _filterIncludeRevokedCheckBox;
     private readonly DateTimePicker _filterStartPicker;
     private readonly DateTimePicker _filterEndPicker;
 
     private readonly Label _refreshLabel;
     private readonly Button _toggleEntryPanelButton;
+    private readonly Button _manageTemplatesButton;
     private readonly Button _toggleChartsButton;
+    private readonly Button _saveTemplateButton;
     private readonly Label _totalValueLabel;
     private readonly Label _normalValueLabel;
     private readonly Label _warningValueLabel;
@@ -59,6 +64,7 @@ internal sealed partial class InspectionPageControl : UserControl
     private Label? _headerSubtitleLabel;
     private TableLayoutPanel? _filterLayout;
     private Control? _filterKeywordBlock;
+    private Control? _filterDeviceBlock;
     private Control? _filterLineBlock;
     private Control? _filterStatusBlock;
     private Control? _filterStartBlock;
@@ -66,11 +72,21 @@ internal sealed partial class InspectionPageControl : UserControl
     private Control? _filterActionBlock;
     private FlowLayoutPanel? _filterActionPanel;
     private InspectionDashboardViewModel _currentDashboard = new();
+    private IReadOnlyList<InspectionTemplateViewModel> _currentTemplates = Array.Empty<InspectionTemplateViewModel>();
+    private Control? _contentHost;
+    private Control? _dashboardLayout;
+    private Control? _metricsPanel;
     private Control? _chartsPanel;
     private SplitContainer? _chartsSplitContainer;
+    private Label? _entryTitleLabel;
+    private Label? _entrySubtitleLabel;
+    private Button? _entrySaveButton;
+    private Button? _entryResetButton;
     private Form? _entryWindow;
     private bool _isDisposingFloatingWindows;
     private bool _isInteractiveResize;
+    private bool _suppressTemplateSelectionChanged;
+    private Guid? _editingRecordId;
     private Bitmap? _resizeSnapshot;
 
     private sealed class BufferedPanel : Panel
@@ -85,6 +101,66 @@ internal sealed partial class InspectionPageControl : UserControl
                 true);
             DoubleBuffered = true;
             UpdateStyles();
+        }
+
+        protected override void OnPaintBackground(PaintEventArgs e)
+        {
+            if (BackColor.A == 255)
+            {
+                using var brush = new SolidBrush(BackColor);
+                e.Graphics.FillRectangle(brush, ClientRectangle);
+                return;
+            }
+
+            base.OnPaintBackground(e);
+        }
+    }
+
+    private sealed class WorkspacePanel : Panel
+    {
+        public WorkspacePanel()
+        {
+            SetStyle(
+                ControlStyles.UserPaint |
+                ControlStyles.AllPaintingInWmPaint |
+                ControlStyles.OptimizedDoubleBuffer |
+                ControlStyles.ResizeRedraw,
+                true);
+            DoubleBuffered = true;
+            UpdateStyles();
+        }
+
+        protected override void OnPaintBackground(PaintEventArgs e)
+        {
+            var parentBackColor = Parent?.BackColor ?? PageBackground;
+            using var backgroundBrush = new SolidBrush(parentBackColor);
+            e.Graphics.FillRectangle(backgroundBrush, ClientRectangle);
+
+            if (Width <= 1 || Height <= 1)
+            {
+                return;
+            }
+
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            var rect = new Rectangle(0, 0, Width - 1, Height - 1);
+            using var workspacePath = CardPanel.CreateRoundedPath(rect, 22);
+            using var workspaceBrush = new SolidBrush(PageBackground);
+            e.Graphics.FillPath(workspaceBrush, workspacePath);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            if (Width <= 1 || Height <= 1)
+            {
+                return;
+            }
+
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            var rect = new Rectangle(0, 0, Width - 1, Height - 1);
+            using var workspacePath = CardPanel.CreateRoundedPath(rect, 22);
+            using var borderPen = new Pen(Color.FromArgb(108, SurfaceBorder), 1.2F);
+            e.Graphics.DrawPath(borderPen, workspacePath);
         }
     }
 
@@ -102,6 +178,24 @@ internal sealed partial class InspectionPageControl : UserControl
             UpdateStyles();
         }
 
+        protected override void OnPaintBackground(PaintEventArgs e)
+        {
+            var parentBackColor = Parent?.BackColor ?? PageBackground;
+            using var backgroundBrush = new SolidBrush(parentBackColor);
+            e.Graphics.FillRectangle(backgroundBrush, ClientRectangle);
+
+            if (Width <= 1 || Height <= 1)
+            {
+                return;
+            }
+
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            var rect = new Rectangle(0, 0, Width - 1, Height - 1);
+            using var cardPath = CreateRoundedPath(rect, 16);
+            using var cardBrush = new SolidBrush(SurfaceBackground);
+            e.Graphics.FillPath(cardBrush, cardPath);
+        }
+
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);
@@ -111,30 +205,13 @@ internal sealed partial class InspectionPageControl : UserControl
             }
 
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            bool isDark = PageBackground.R < 100;
             var rect = new Rectangle(0, 0, Width - 1, Height - 1);
-            var cardPath = CreateRoundedPath(rect, 16);
-
-            if (isDark)
-            {
-                using var brush = new SolidBrush(SurfaceBackground);
-                using var pen = new Pen(SurfaceBorder, 1.2F);
-                e.Graphics.FillPath(brush, cardPath);
-                e.Graphics.DrawPath(pen, cardPath);
-            }
-            else
-            {
-                // Clean, high-contrast white cards for Light mode
-                using var brush = new SolidBrush(SurfaceBackground);
-                using var pen = new Pen(Color.FromArgb(226, 232, 240), 1.2F);
-                e.Graphics.FillPath(brush, cardPath);
-                e.Graphics.DrawPath(pen, cardPath);
-            }
-            
-            cardPath.Dispose();
+            using var cardPath = CreateRoundedPath(rect, 16);
+            using var pen = new Pen(SurfaceBorder, 1.2F);
+            e.Graphics.DrawPath(pen, cardPath);
         }
 
-        private static GraphicsPath CreateRoundedPath(Rectangle rect, int radius)
+        internal static GraphicsPath CreateRoundedPath(Rectangle rect, int radius)
         {
             var path = new GraphicsPath();
             var diameter = radius * 2;
@@ -175,6 +252,21 @@ internal sealed partial class InspectionPageControl : UserControl
         public override string ToString() => Text;
     }
 
+    private sealed class EntryTemplateOption
+    {
+        public EntryTemplateOption(string text, InspectionTemplateViewModel? template)
+        {
+            Text = text;
+            Template = template;
+        }
+
+        public string Text { get; }
+
+        public InspectionTemplateViewModel? Template { get; }
+
+        public override string ToString() => Text;
+    }
+
     public InspectionPageControl(string account, InspectionController controller)
     {
         _account = account;
@@ -186,6 +278,8 @@ internal sealed partial class InspectionPageControl : UserControl
         BackColor = PageBackground;
         DoubleBuffered = true;
 
+        _entryTemplateCombo = CreateDropDownListComboBox();
+        _entryTemplateCombo.SelectedIndexChanged += OnEntryTemplateChanged;
         _entryLineCombo = CreateEditableComboBox();
         _entryDeviceTextBox = CreateTextBox();
         _entryItemTextBox = CreateTextBox();
@@ -204,8 +298,11 @@ internal sealed partial class InspectionPageControl : UserControl
         };
 
         _filterKeywordTextBox = CreateTextBox();
+        _filterDeviceTextBox = CreateTextBox();
+        _filterDeviceTextBox.PlaceholderText = "\u8f93\u5165\u8bbe\u5907\u540d";
         _filterLineCombo = CreateDropDownListComboBox();
         _filterStatusCombo = CreateDropDownListComboBox();
+        _filterIncludeRevokedCheckBox = CreateCheckBox("显示已撤回");
         _filterStartPicker = CreateDateTimePicker(true);
         _filterEndPicker = CreateDateTimePicker(true);
 
@@ -218,8 +315,12 @@ internal sealed partial class InspectionPageControl : UserControl
         };
         _toggleEntryPanelButton = CreateSecondaryButton("新增点检");
         _toggleEntryPanelButton.Click += (_, _) => OpenEntryWindow();
+        _manageTemplatesButton = CreateSecondaryButton("台账模板");
+        _manageTemplatesButton.Click += (_, _) => OpenTemplateManager();
         _toggleChartsButton = CreateSecondaryButton("趋势分析");
         _toggleChartsButton.Click += (_, _) => ToggleChartsDrawer();
+        _saveTemplateButton = CreateSecondaryButton("保存为模板");
+        _saveTemplateButton.Click += OnSaveTemplateClicked;
 
         _totalValueLabel = CreateMetricValueLabel();
         _normalValueLabel = CreateMetricValueLabel();
@@ -228,6 +329,7 @@ internal sealed partial class InspectionPageControl : UserControl
         _passRateValueLabel = CreateMetricValueLabel();
 
         _recordsGrid = CreateRecordsGrid();
+        InitializeRecordInteractions();
         _trendChart = CreateTrendCanvas();
         _statusChart = CreateStatusCanvas();
 
@@ -242,6 +344,592 @@ internal sealed partial class InspectionPageControl : UserControl
             DisposeResizeSnapshot();
             DisposeFloatingWindows();
         };
+    }
+
+    private void InitializeRecordInteractions()
+    {
+        var menu = new ContextMenuStrip();
+        var editItem = new ToolStripMenuItem("编辑记录");
+        var closeItem = new ToolStripMenuItem("异常闭环");
+        var revokeItem = new ToolStripMenuItem("撤回记录");
+        var deleteItem = new ToolStripMenuItem("删除记录");
+
+        editItem.Click += (_, _) =>
+        {
+            var record = GetSelectedRecord();
+            if (record is not null)
+            {
+                OpenEntryWindowForEdit(record);
+            }
+        };
+        closeItem.Click += (_, _) => CloseSelectedRecord();
+        revokeItem.Click += (_, _) => RevokeSelectedRecord();
+        deleteItem.Click += (_, _) => DeleteSelectedRecord();
+
+        menu.Items.AddRange([editItem, closeItem, revokeItem, deleteItem]);
+        menu.Opening += (_, args) =>
+        {
+            var record = GetSelectedRecord();
+            if (record is null)
+            {
+                args.Cancel = true;
+                return;
+            }
+
+            editItem.Enabled = !record.IsRevoked;
+            closeItem.Enabled = !record.IsRevoked && !record.IsClosed && record.Status != InspectionStatus.Normal;
+            revokeItem.Enabled = !record.IsRevoked;
+            deleteItem.Enabled = true;
+        };
+
+        _recordsGrid.ContextMenuStrip = menu;
+        _recordsGrid.CellMouseDown += (_, args) =>
+        {
+            if (args.RowIndex < 0)
+            {
+                return;
+            }
+
+            _recordsGrid.ClearSelection();
+            _recordsGrid.Rows[args.RowIndex].Selected = true;
+            if (args.ColumnIndex >= 0)
+            {
+                _recordsGrid.CurrentCell = _recordsGrid.Rows[args.RowIndex].Cells[args.ColumnIndex];
+            }
+        };
+        _recordsGrid.CellDoubleClick += (_, args) =>
+        {
+            if (args.RowIndex < 0)
+            {
+                return;
+            }
+
+            var record = GetSelectedRecord();
+            if (record is not null && !record.IsRevoked)
+            {
+                OpenEntryWindowForEdit(record);
+            }
+        };
+        _recordsGrid.DataBindingComplete += (_, _) => ApplyRecordRowStyles();
+    }
+
+    private InspectionRecordViewModel? GetSelectedRecord()
+    {
+        return _recordsGrid.CurrentRow?.DataBoundItem as InspectionRecordViewModel;
+    }
+
+    private void ApplyRecordRowStyles()
+    {
+        foreach (DataGridViewRow row in _recordsGrid.Rows)
+        {
+            if (row.DataBoundItem is not InspectionRecordViewModel record)
+            {
+                continue;
+            }
+
+            if (record.IsRevoked)
+            {
+                row.DefaultCellStyle.ForeColor = TextMutedColor;
+                row.DefaultCellStyle.SelectionBackColor = Color.FromArgb(54, 60, 74);
+                row.DefaultCellStyle.SelectionForeColor = TextPrimaryColor;
+            }
+            else
+            {
+                row.DefaultCellStyle.ForeColor = TextSecondaryColor;
+                row.DefaultCellStyle.SelectionBackColor = Color.FromArgb(45, 56, 78);
+                row.DefaultCellStyle.SelectionForeColor = TextPrimaryColor;
+            }
+        }
+    }
+
+    private void UpdateEntryModeUi()
+    {
+        var isEditing = _editingRecordId.HasValue;
+        if (_entryWindow is not null)
+        {
+            _entryWindow.Text = isEditing ? "编辑点检记录" : "点检录入";
+        }
+
+        if (_entryTitleLabel is not null)
+        {
+            _entryTitleLabel.Text = isEditing ? "编辑点检记录" : "点检记录录入";
+        }
+
+        if (_entrySubtitleLabel is not null)
+        {
+            _entrySubtitleLabel.Text = isEditing
+                ? "保存后会覆盖当前记录，异常闭环和撤回状态会保留。"
+                : "新录入的数据会立即进入查询列表和监控图表。";
+        }
+
+        if (_entrySaveButton is not null)
+        {
+            _entrySaveButton.Text = isEditing ? "保存修改" : "保存记录";
+        }
+
+        if (_entryResetButton is not null)
+        {
+            _entryResetButton.Text = isEditing ? "退出编辑" : "重置表单";
+        }
+    }
+
+    private void StartCreateEntry(bool keepLine = false, bool keepInspector = false)
+    {
+        _editingRecordId = null;
+        UpdateEntryModeUi();
+        ResetEntryForm(keepLine, keepInspector);
+    }
+
+    private void ShowEntryWindow()
+    {
+        _entryWindow ??= CreateEntryWindow();
+        UpdateEntryModeUi();
+        var owner = FindForm();
+        CenterEntryWindow(owner);
+        if (!_entryWindow.Visible)
+        {
+            if (owner is not null)
+            {
+                _entryWindow.Show(owner);
+            }
+            else
+            {
+                _entryWindow.Show();
+            }
+        }
+
+        CenterEntryWindow(owner);
+        _entryWindow.BringToFront();
+        _entryWindow.Activate();
+        if (_entryLineCombo.CanFocus)
+        {
+            _entryLineCombo.Focus();
+        }
+    }
+
+    private void OpenEntryWindowForEdit(InspectionRecordViewModel record)
+    {
+        _editingRecordId = record.Id;
+        _entryWindow ??= CreateEntryWindow();
+        UpdateEntryModeUi();
+        ResetEntryForm();
+
+        _entryLineCombo.Text = record.LineName;
+        _entryDeviceTextBox.Text = record.DeviceName;
+        _entryItemTextBox.Text = record.InspectionItem;
+        _entryInspectorTextBox.Text = record.Inspector;
+        SelectStatus(record.Status);
+        _entryMeasuredValueInput.Value = Math.Clamp(record.MeasuredValue, _entryMeasuredValueInput.Minimum, _entryMeasuredValueInput.Maximum);
+        _entryCheckedAtPicker.Value = record.CheckedAtValue;
+        _entryRemarkTextBox.Text = record.Remark;
+        TrySelectTemplate(record.LineName, record.DeviceName, record.InspectionItem);
+        _entryFeedbackLabel.ForeColor = AccentBlue;
+        _entryFeedbackLabel.Text = "当前正在编辑所选记录。";
+        ShowEntryWindow();
+    }
+
+    private void SelectStatus(InspectionStatus status)
+    {
+        for (var index = 0; index < _entryStatusCombo.Items.Count; index++)
+        {
+            if (_entryStatusCombo.Items[index] is StatusOption option && option.Value == status)
+            {
+                _entryStatusCombo.SelectedIndex = index;
+                return;
+            }
+        }
+    }
+
+    private void UpdateTemplateOptions(IReadOnlyList<InspectionTemplateViewModel> templates)
+    {
+        _currentTemplates = templates;
+        var selectedTemplateId = (_entryTemplateCombo.SelectedItem as EntryTemplateOption)?.Template?.Id;
+
+        _suppressTemplateSelectionChanged = true;
+        _entryTemplateCombo.BeginUpdate();
+        _entryTemplateCombo.Items.Clear();
+        _entryTemplateCombo.Items.Add(new EntryTemplateOption("不使用模板", null));
+        foreach (var template in templates)
+        {
+            _entryTemplateCombo.Items.Add(new EntryTemplateOption(template.DisplayText, template));
+        }
+        _entryTemplateCombo.EndUpdate();
+
+        var selected = _entryTemplateCombo.Items
+            .OfType<EntryTemplateOption>()
+            .FirstOrDefault(option => option.Template?.Id == selectedTemplateId);
+        _entryTemplateCombo.SelectedItem = selected ?? _entryTemplateCombo.Items[0];
+        _suppressTemplateSelectionChanged = false;
+    }
+
+    private void TrySelectTemplate(string lineName, string deviceName, string inspectionItem)
+    {
+        var matched = _entryTemplateCombo.Items
+            .OfType<EntryTemplateOption>()
+            .FirstOrDefault(option =>
+                option.Template is not null &&
+                string.Equals(option.Template.LineName, lineName, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(option.Template.DeviceName, deviceName, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(option.Template.InspectionItem, inspectionItem, StringComparison.OrdinalIgnoreCase));
+
+        _suppressTemplateSelectionChanged = true;
+        _entryTemplateCombo.SelectedItem = matched ?? _entryTemplateCombo.Items.Cast<object>().FirstOrDefault();
+        _suppressTemplateSelectionChanged = false;
+    }
+
+    private void OnEntryTemplateChanged(object? sender, EventArgs e)
+    {
+        if (_suppressTemplateSelectionChanged)
+        {
+            return;
+        }
+
+        if ((_entryTemplateCombo.SelectedItem as EntryTemplateOption)?.Template is not { } template)
+        {
+            return;
+        }
+
+        _entryLineCombo.Text = template.LineName;
+        _entryDeviceTextBox.Text = template.DeviceName;
+        _entryItemTextBox.Text = template.InspectionItem;
+        _entryInspectorTextBox.Text = template.DefaultInspector;
+        if (string.IsNullOrWhiteSpace(_entryRemarkTextBox.Text))
+        {
+            _entryRemarkTextBox.Text = template.DefaultRemark;
+        }
+    }
+
+    private void OpenTemplateManager()
+    {
+        using var window = new Form
+        {
+            Text = "台账模板",
+            StartPosition = FormStartPosition.CenterParent,
+            Size = new Size(860, 520),
+            MinimumSize = new Size(760, 420),
+            FormBorderStyle = FormBorderStyle.SizableToolWindow,
+            BackColor = PageBackground,
+            Font = Font,
+            ShowIcon = false,
+            ShowInTaskbar = false
+        };
+
+        var shell = new BufferedPanel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = PageBackground,
+            Padding = new Padding(18)
+        };
+
+        var card = CreateSurfacePanel();
+        card.Dock = DockStyle.Fill;
+        card.Padding = new Padding(18);
+
+        var titleLabel = new Label
+        {
+            AutoSize = true,
+            Dock = DockStyle.Top,
+            Font = new Font("Microsoft YaHei UI", 13F, FontStyle.Bold),
+            Text = "点检台账模板"
+        };
+
+        var tipLabel = new Label
+        {
+            AutoSize = true,
+            Dock = DockStyle.Top,
+            ForeColor = TextMutedColor,
+            Padding = new Padding(0, 6, 0, 12),
+            Text = "先在录入窗体填好产线、设备、点检项目和点检人，再点“保存为模板”。这里主要用于查看和删除模板。"
+        };
+
+        var grid = new BufferedDataGridView
+        {
+            Dock = DockStyle.Fill,
+            AutoGenerateColumns = false,
+            ReadOnly = true,
+            AllowUserToAddRows = false,
+            AllowUserToDeleteRows = false,
+            AllowUserToResizeRows = false,
+            BackgroundColor = SurfaceBackground,
+            BorderStyle = BorderStyle.None,
+            RowHeadersVisible = false,
+            SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+            MultiSelect = false
+        };
+        grid.EnableHeadersVisualStyles = false;
+        grid.ColumnHeadersDefaultCellStyle.BackColor = InputBackground;
+        grid.ColumnHeadersDefaultCellStyle.ForeColor = TextPrimaryColor;
+        grid.DefaultCellStyle.BackColor = SurfaceBackground;
+        grid.DefaultCellStyle.ForeColor = TextSecondaryColor;
+        grid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(45, 56, 78);
+        grid.DefaultCellStyle.SelectionForeColor = TextPrimaryColor;
+        grid.GridColor = SurfaceBorder;
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InspectionTemplateViewModel.LineName), HeaderText = "产线", Width = 100 });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InspectionTemplateViewModel.DeviceName), HeaderText = "设备名称", Width = 180 });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InspectionTemplateViewModel.InspectionItem), HeaderText = "点检项目", Width = 180 });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InspectionTemplateViewModel.DefaultInspector), HeaderText = "默认点检人", Width = 120 });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InspectionTemplateViewModel.DefaultRemark), HeaderText = "默认备注", AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
+
+        var templateSource = new BindingSource();
+        void ReloadTemplates()
+        {
+            templateSource.DataSource = _controller.GetTemplates().ToList();
+            grid.DataSource = templateSource;
+        }
+
+        var buttonPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Bottom,
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            Padding = new Padding(0, 12, 0, 0)
+        };
+
+        var deleteButton = CreateSecondaryButton("删除模板");
+        deleteButton.Click += (_, _) =>
+        {
+            if (grid.CurrentRow?.DataBoundItem is not InspectionTemplateViewModel template)
+            {
+                MessageBox.Show(window, "请先选中要删除的模板。", "删除模板", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            if (MessageBox.Show(
+                    window,
+                    $"确定删除模板：{template.DisplayText}？",
+                    "删除模板",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Question) != DialogResult.Yes)
+            {
+                return;
+            }
+
+            try
+            {
+                _controller.DeleteTemplate(template.Id);
+                RefreshDashboard();
+                ReloadTemplates();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(window, ex.Message, "删除模板失败", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        };
+
+        var closeButton = CreatePrimaryButton("关闭");
+        closeButton.Click += (_, _) => window.Close();
+
+        buttonPanel.Controls.Add(deleteButton);
+        buttonPanel.Controls.Add(closeButton);
+
+        card.Controls.Add(grid);
+        card.Controls.Add(buttonPanel);
+        card.Controls.Add(tipLabel);
+        card.Controls.Add(titleLabel);
+        shell.Controls.Add(card);
+        window.Controls.Add(shell);
+        ApplyDarkVisualTree(window);
+        ReloadTemplates();
+        window.ShowDialog(this);
+    }
+
+    private string? ShowActionInputDialog(string title, string description, string confirmText)
+    {
+        using var window = new Form
+        {
+            Text = title,
+            StartPosition = FormStartPosition.CenterParent,
+            Size = new Size(520, 320),
+            MinimumSize = new Size(480, 300),
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false,
+            BackColor = PageBackground,
+            Font = Font,
+            ShowIcon = false,
+            ShowInTaskbar = false
+        };
+
+        var shell = new BufferedPanel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = PageBackground,
+            Padding = new Padding(18)
+        };
+
+        var card = CreateSurfacePanel();
+        card.Dock = DockStyle.Fill;
+        card.Padding = new Padding(18);
+
+        var descriptionLabel = new Label
+        {
+            AutoSize = true,
+            Dock = DockStyle.Top,
+            ForeColor = TextSecondaryColor,
+            Text = description
+        };
+
+        var inputBox = CreateTextBox(multiline: true);
+        inputBox.Dock = DockStyle.Fill;
+
+        var buttonPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Bottom,
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            Padding = new Padding(0, 12, 0, 0)
+        };
+
+        var confirmButton = CreatePrimaryButton(confirmText);
+        var cancelButton = CreateSecondaryButton("取消");
+        confirmButton.Click += (_, _) =>
+        {
+            if (string.IsNullOrWhiteSpace(inputBox.Text))
+            {
+                MessageBox.Show(window, "请先填写说明。", title, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            window.DialogResult = DialogResult.OK;
+            window.Close();
+        };
+        cancelButton.Click += (_, _) =>
+        {
+            window.DialogResult = DialogResult.Cancel;
+            window.Close();
+        };
+
+        buttonPanel.Controls.Add(confirmButton);
+        buttonPanel.Controls.Add(cancelButton);
+
+        card.Controls.Add(inputBox);
+        card.Controls.Add(buttonPanel);
+        card.Controls.Add(descriptionLabel);
+        shell.Controls.Add(card);
+        window.Controls.Add(shell);
+        ApplyDarkVisualTree(window);
+
+        return window.ShowDialog(this) == DialogResult.OK
+            ? inputBox.Text.Trim()
+            : null;
+    }
+
+    private void CloseSelectedRecord()
+    {
+        var record = GetSelectedRecord();
+        if (record is null)
+        {
+            return;
+        }
+
+        var closureRemark = ShowActionInputDialog("异常闭环", $"请填写 {record.DeviceName} / {record.InspectionItem} 的闭环说明。", "提交闭环");
+        if (closureRemark is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _controller.Close(record.Id, _account, closureRemark);
+            RefreshDashboard();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "异常闭环失败", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
+
+    private void RevokeSelectedRecord()
+    {
+        var record = GetSelectedRecord();
+        if (record is null)
+        {
+            return;
+        }
+
+        var revokeReason = ShowActionInputDialog("撤回记录", $"请填写撤回 {record.DeviceName} / {record.InspectionItem} 的原因。", "确认撤回");
+        if (revokeReason is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _controller.Revoke(record.Id, _account, revokeReason);
+            _filterIncludeRevokedCheckBox.Checked = true;
+            RefreshDashboard();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "撤回失败", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
+
+    private void DeleteSelectedRecord()
+    {
+        var record = GetSelectedRecord();
+        if (record is null)
+        {
+            return;
+        }
+
+        if (MessageBox.Show(
+                this,
+                $"确定永久删除 {record.DeviceName} / {record.InspectionItem}？这个操作不能撤销。",
+                "删除记录",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning) != DialogResult.Yes)
+        {
+            return;
+        }
+
+        try
+        {
+            _controller.Delete(record.Id);
+            RefreshDashboard();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "删除失败", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
+
+    private void OnSaveTemplateClicked(object? sender, EventArgs e)
+    {
+        try
+        {
+            var template = new InspectionTemplateViewModel
+            {
+                LineName = _entryLineCombo.Text.Trim(),
+                DeviceName = _entryDeviceTextBox.Text.Trim(),
+                InspectionItem = _entryItemTextBox.Text.Trim(),
+                DefaultInspector = _entryInspectorTextBox.Text.Trim(),
+                DefaultRemark = _entryRemarkTextBox.Text.Trim()
+            };
+            _controller.SaveTemplate(template);
+            _entryFeedbackLabel.ForeColor = Color.FromArgb(39, 174, 96);
+            _entryFeedbackLabel.Text = "已保存为台账模板。";
+            RefreshDashboard();
+            TrySelectTemplate(template.LineName, template.DeviceName, template.InspectionItem);
+        }
+        catch (Exception ex)
+        {
+            _entryFeedbackLabel.ForeColor = Color.FromArgb(231, 76, 60);
+            _entryFeedbackLabel.Text = ex.Message;
+        }
+    }
+
+    private void OnResetEntryClicked(object? sender, EventArgs e)
+    {
+        if (_editingRecordId.HasValue)
+        {
+            StartCreateEntry();
+            return;
+        }
+
+        ResetEntryForm();
     }
 
     protected override void OnSizeChanged(EventArgs e)
@@ -269,7 +957,7 @@ internal sealed partial class InspectionPageControl : UserControl
     {
         BindStatusOptions();
         ResetFilters();
-        ResetEntryForm();
+        StartCreateEntry();
         RefreshDashboard();
         ApplyResponsiveLayout();
     }
@@ -281,28 +969,8 @@ internal sealed partial class InspectionPageControl : UserControl
 
     private void OpenEntryWindow()
     {
-        _entryWindow ??= CreateEntryWindow();
-        var owner = FindForm();
-        CenterEntryWindow(owner);
-        if (!_entryWindow.Visible)
-        {
-            if (owner is not null)
-            {
-                _entryWindow.Show(owner);
-            }
-            else
-            {
-                _entryWindow.Show();
-            }
-        }
-
-        CenterEntryWindow(owner);
-        _entryWindow.BringToFront();
-        _entryWindow.Activate();
-        if (_entryLineCombo.CanFocus)
-        {
-            _entryLineCombo.Focus();
-        }
+        StartCreateEntry();
+        ShowEntryWindow();
     }
 
     private Form CreateEntryWindow()
@@ -509,6 +1177,7 @@ internal sealed partial class InspectionPageControl : UserControl
     {
         if (_filterLayout is null ||
             _filterKeywordBlock is null ||
+            _filterDeviceBlock is null ||
             _filterLineBlock is null ||
             _filterStatusBlock is null ||
             _filterStartBlock is null ||
@@ -530,6 +1199,7 @@ internal sealed partial class InspectionPageControl : UserControl
         var filterBlocks = new[]
         {
             _filterKeywordBlock,
+            _filterDeviceBlock,
             _filterLineBlock,
             _filterStatusBlock,
             _filterStartBlock,
@@ -646,6 +1316,7 @@ internal sealed partial class InspectionPageControl : UserControl
         {
             var dashboard = _controller.Load(BuildFilter());
             UpdateLineOptions(dashboard.LineOptions);
+            UpdateTemplateOptions(dashboard.Templates);
             UpdateSummary(dashboard);
             UpdateGrid(dashboard.Records);
             UpdateCharts(dashboard);
@@ -789,10 +1460,21 @@ internal sealed partial class InspectionPageControl : UserControl
         try
         {
             var entry = BuildEntry();
-            _controller.Add(entry);
-            ResetEntryForm(keepLine: true, keepInspector: true);
-            _entryFeedbackLabel.ForeColor = Color.FromArgb(39, 174, 96);
-            _entryFeedbackLabel.Text = $"已保存：{entry.DeviceName} / {entry.CheckedAt:yyyy-MM-dd HH:mm}";
+            if (_editingRecordId.HasValue)
+            {
+                _controller.Update(_editingRecordId.Value, entry);
+                StartCreateEntry();
+                _entryFeedbackLabel.ForeColor = Color.FromArgb(39, 174, 96);
+                _entryFeedbackLabel.Text = $"已更新：{entry.DeviceName} / {entry.CheckedAt:yyyy-MM-dd HH:mm}";
+            }
+            else
+            {
+                _controller.Add(entry);
+                StartCreateEntry(keepLine: true, keepInspector: true);
+                _entryFeedbackLabel.ForeColor = Color.FromArgb(39, 174, 96);
+                _entryFeedbackLabel.Text = $"已保存：{entry.DeviceName} / {entry.CheckedAt:yyyy-MM-dd HH:mm}";
+            }
+
             RefreshDashboard();
         }
         catch (Exception ex)
@@ -843,10 +1525,12 @@ internal sealed partial class InspectionPageControl : UserControl
         return new InspectionFilterViewModel
         {
             Keyword = _filterKeywordTextBox.Text.Trim(),
+            DeviceName = _filterDeviceTextBox.Text.Trim(),
             LineName = selectedLine == "全部" ? string.Empty : selectedLine ?? string.Empty,
             Status = status,
             StartTime = startTime,
-            EndTime = endTime
+            EndTime = endTime,
+            IncludeRevoked = _filterIncludeRevokedCheckBox.Checked
         };
     }
 
@@ -868,8 +1552,10 @@ internal sealed partial class InspectionPageControl : UserControl
     private void ResetFilters()
     {
         _filterKeywordTextBox.Clear();
+        _filterDeviceTextBox.Clear();
         _filterStartPicker.Checked = false;
         _filterEndPicker.Checked = false;
+        _filterIncludeRevokedCheckBox.Checked = false;
         if (_filterLineCombo.Items.Count > 0)
         {
             _filterLineCombo.SelectedIndex = 0;
@@ -884,6 +1570,17 @@ internal sealed partial class InspectionPageControl : UserControl
     {
         var currentLine = _entryLineCombo.Text;
         var currentInspector = _entryInspectorTextBox.Text;
+
+        _suppressTemplateSelectionChanged = true;
+        if (_entryTemplateCombo.Items.Count > 0)
+        {
+            _entryTemplateCombo.SelectedIndex = 0;
+        }
+        else
+        {
+            _entryTemplateCombo.Text = string.Empty;
+        }
+        _suppressTemplateSelectionChanged = false;
 
         if (keepLine)
         {
@@ -905,38 +1602,47 @@ internal sealed partial class InspectionPageControl : UserControl
         _entryMeasuredValueInput.Value = 0;
         _entryCheckedAtPicker.Value = DateTime.Now;
         _entryRemarkTextBox.Clear();
-
-        if (!keepLine && !keepInspector)
-        {
-            _entryFeedbackLabel.ForeColor = Color.FromArgb(83, 131, 255);
-            _entryFeedbackLabel.Text = "录入后列表和图表会即时刷新。";
-        }
+        _entryFeedbackLabel.ForeColor = AccentBlue;
+        _entryFeedbackLabel.Text = "录入后列表和图表会即时刷新。";
     }
 
-    public void ApplyTheme(bool isDarkTheme)
+    public void ApplyTheme()
     {
-        if (isDarkTheme)
-        {
-            PageBackground = Color.FromArgb(10, 10, 15);
-            SurfaceBackground = Color.FromArgb(28, 30, 40);
-            SurfaceBorder = Color.FromArgb(80, 85, 110);
-            InputBackground = Color.FromArgb(18, 22, 30);
-            TextPrimaryColor = Color.FromArgb(255, 255, 255);
-            TextSecondaryColor = Color.FromArgb(210, 215, 230);
-            TextMutedColor = Color.FromArgb(160, 170, 190);
-        }
-        else
-        {
-            PageBackground = Color.FromArgb(214, 226, 240);
-            SurfaceBackground = Color.FromArgb(255, 255, 255);
-            SurfaceBorder = Color.FromArgb(210, 215, 225);
-            InputBackground = Color.FromArgb(248, 250, 252);
-            TextPrimaryColor = Color.FromArgb(31, 41, 55);
-            TextSecondaryColor = Color.FromArgb(99, 114, 130);
-            TextMutedColor = Color.FromArgb(144, 155, 170);
-        }
+        PageBackground = Color.FromArgb(16, 19, 27);
+        SurfaceBackground = Color.FromArgb(28, 30, 40);
+        SurfaceBorder = Color.FromArgb(80, 85, 110);
+        InputBackground = Color.FromArgb(18, 22, 30);
+        TextPrimaryColor = Color.FromArgb(255, 255, 255);
+        TextSecondaryColor = Color.FromArgb(210, 215, 230);
+        TextMutedColor = Color.FromArgb(160, 170, 190);
 
         BackColor = PageBackground;
+        if (_layoutRoot != null)
+        {
+            _layoutRoot.BackColor = PageBackground;
+        }
+        if (_contentHost != null)
+        {
+            _contentHost.BackColor = PageBackground;
+        }
+        if (_dashboardLayout != null)
+        {
+            _dashboardLayout.BackColor = PageBackground;
+        }
+        if (_metricsPanel != null)
+        {
+            _metricsPanel.BackColor = PageBackground;
+        }
+        if (_chartsPanel != null)
+        {
+            _chartsPanel.BackColor = PageBackground;
+        }
+        if (_chartsSplitContainer != null)
+        {
+            _chartsSplitContainer.BackColor = PageBackground;
+            _chartsSplitContainer.Panel1.BackColor = PageBackground;
+            _chartsSplitContainer.Panel2.BackColor = PageBackground;
+        }
         if (_trendChart != null) _trendChart.BackColor = SurfaceBackground;
         if (_statusChart != null) _statusChart.BackColor = SurfaceBackground;
         
@@ -959,7 +1665,7 @@ internal sealed partial class InspectionPageControl : UserControl
             switch (control)
             {
                 case CardPanel cardPanel:
-                    cardPanel.BackColor = PageBackground;
+                    cardPanel.BackColor = SurfaceBackground;
                     break;
                 case Panel panel when panel is not CardPanel && panel.Parent is CardPanel:
                     panel.BackColor = SurfaceBackground;
@@ -968,35 +1674,35 @@ internal sealed partial class InspectionPageControl : UserControl
                     tlp.BackColor = SurfaceBackground;
                     break;
                 case Label label when label == _totalValueLabel:
-                    label.BackColor = SurfaceBackground;
+                    label.BackColor = Color.Transparent;
                     label.ForeColor = isDarkTheme ? Color.FromArgb(83, 131, 255) : Color.FromArgb(41, 98, 255);
                     break;
                 case Label label when label == _normalValueLabel:
-                    label.BackColor = SurfaceBackground;
+                    label.BackColor = Color.Transparent;
                     label.ForeColor = isDarkTheme ? Color.FromArgb(39, 174, 96) : Color.FromArgb(22, 138, 62);
                     break;
                 case Label label when label == _warningValueLabel:
-                    label.BackColor = SurfaceBackground;
+                    label.BackColor = Color.Transparent;
                     label.ForeColor = isDarkTheme ? Color.FromArgb(241, 196, 15) : Color.FromArgb(217, 119, 6);
                     break;
                 case Label label when label == _abnormalValueLabel:
-                    label.BackColor = SurfaceBackground;
+                    label.BackColor = Color.Transparent;
                     label.ForeColor = isDarkTheme ? Color.FromArgb(231, 76, 60) : Color.FromArgb(220, 38, 38);
                     break;
                 case Label label when label == _passRateValueLabel:
-                    label.BackColor = SurfaceBackground;
+                    label.BackColor = Color.Transparent;
                     label.ForeColor = isDarkTheme ? Color.FromArgb(52, 152, 219) : Color.FromArgb(37, 99, 235);
                     break;
                 case Label label when label == _entryFeedbackLabel:
-                    label.BackColor = SurfaceBackground; // Usually inside entry CardPanel
+                    label.BackColor = Color.Transparent; // Usually inside entry CardPanel
                     label.ForeColor = isDarkTheme ? Color.FromArgb(83, 131, 255) : Color.FromArgb(41, 98, 255);
                     break;
                 case Label label when label == _refreshLabel:
-                    label.BackColor = SurfaceBackground;
+                    label.BackColor = Color.Transparent;
                     label.ForeColor = TextMutedColor;
                     break;
                 case Label label:
-                    label.BackColor = SurfaceBackground;
+                    label.BackColor = Color.Transparent;
                     label.ForeColor = label.Font.Bold || label.Font.Size >= 12F
                         ? TextPrimaryColor
                         : TextSecondaryColor;
@@ -1019,6 +1725,10 @@ internal sealed partial class InspectionPageControl : UserControl
                     dateTimePicker.CalendarTitleBackColor = SurfaceBackground;
                     dateTimePicker.CalendarTitleForeColor = TextPrimaryColor;
                     break;
+                case CheckBox checkBox:
+                    checkBox.BackColor = Color.Transparent;
+                    checkBox.ForeColor = TextSecondaryColor;
+                    break;
                 case Button button:
                     if (button.FlatAppearance.BorderSize == 0) // Primary button
                     {
@@ -1037,7 +1747,7 @@ internal sealed partial class InspectionPageControl : UserControl
                     grid.ColumnHeadersDefaultCellStyle.BackColor = InputBackground;
                     grid.ColumnHeadersDefaultCellStyle.ForeColor = TextPrimaryColor;
                     grid.DefaultCellStyle.BackColor = SurfaceBackground;
-                    grid.DefaultCellStyle.ForeColor = TextSecondaryColor;
+                    grid.DefaultCellStyle.ForeColor = isDarkTheme ? TextSecondaryColor : TextPrimaryColor;
                     grid.DefaultCellStyle.SelectionBackColor = isDarkTheme ? Color.FromArgb(45, 56, 78) : Color.FromArgb(226, 232, 240);
                     grid.DefaultCellStyle.SelectionForeColor = TextPrimaryColor;
                     grid.GridColor = SurfaceBorder;
@@ -1154,6 +1864,20 @@ internal sealed partial class InspectionPageControl : UserControl
         return button;
     }
 
+    private static CheckBox CreateCheckBox(string text)
+    {
+        return new CheckBox
+        {
+            AutoSize = true,
+            BackColor = Color.Transparent,
+            Font = new Font("Microsoft YaHei UI", 9F),
+            ForeColor = TextSecondaryColor,
+            Margin = new Padding(0, 6, 0, 0),
+            Text = text,
+            UseVisualStyleBackColor = false
+        };
+    }
+
     private static DataGridView CreateRecordsGrid()
     {
         var grid = new BufferedDataGridView
@@ -1189,9 +1913,11 @@ internal sealed partial class InspectionPageControl : UserControl
         grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InspectionRecordViewModel.Inspector), HeaderText = "点检人", FillWeight = 80 });
         grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InspectionRecordViewModel.StatusText), HeaderText = "状态", FillWeight = 70 });
         grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InspectionRecordViewModel.MeasuredValueText), HeaderText = "测量值", FillWeight = 70 });
-        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InspectionRecordViewModel.Remark), HeaderText = "备注", FillWeight = 150 });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InspectionRecordViewModel.ClosureStateText), HeaderText = "闭环状态", FillWeight = 110 });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InspectionRecordViewModel.ActionRemark), HeaderText = "处理说明", FillWeight = 180 });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InspectionRecordViewModel.Remark), HeaderText = "原始备注", FillWeight = 150 });
 
-        var columnWidths = new[] { 150, 90, 160, 150, 100, 90, 100, 220 };
+        var columnWidths = new[] { 150, 90, 160, 150, 100, 90, 90, 130, 240, 220 };
         for (var index = 0; index < grid.Columns.Count && index < columnWidths.Length; index++)
         {
             grid.Columns[index].AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
@@ -1200,8 +1926,7 @@ internal sealed partial class InspectionPageControl : UserControl
 
         grid.CellFormatting += (_, args) =>
         {
-            if (grid.Columns[args.ColumnIndex].DataPropertyName != nameof(InspectionRecordViewModel.StatusText) ||
-                args.Value is not string statusText)
+            if (args.Value is not string text)
             {
                 return;
             }
@@ -1212,13 +1937,29 @@ internal sealed partial class InspectionPageControl : UserControl
                 return;
             }
 
-            cellStyle.ForeColor = statusText switch
+            var propertyName = grid.Columns[args.ColumnIndex].DataPropertyName;
+            if (propertyName == nameof(InspectionRecordViewModel.StatusText))
             {
-                "正常" => grid.BackgroundColor.R < 100 ? Color.FromArgb(39, 174, 96) : Color.FromArgb(22, 138, 62),
-                "预警" => grid.BackgroundColor.R < 100 ? Color.FromArgb(241, 196, 15) : Color.FromArgb(217, 119, 6),
-                "异常" => grid.BackgroundColor.R < 100 ? Color.FromArgb(231, 76, 60) : Color.FromArgb(220, 38, 38),
-                _ => TextPrimaryColor
-            };
+                cellStyle.ForeColor = text switch
+                {
+                    "正常" => grid.BackgroundColor.R < 100 ? Color.FromArgb(39, 174, 96) : Color.FromArgb(22, 138, 62),
+                    "预警" => grid.BackgroundColor.R < 100 ? Color.FromArgb(241, 196, 15) : Color.FromArgb(217, 119, 6),
+                    "异常" => grid.BackgroundColor.R < 100 ? Color.FromArgb(231, 76, 60) : Color.FromArgb(220, 38, 38),
+                    _ => TextPrimaryColor
+                };
+                return;
+            }
+
+            if (propertyName == nameof(InspectionRecordViewModel.ClosureStateText))
+            {
+                cellStyle.ForeColor = text switch
+                {
+                    var value when value.StartsWith("已闭环", StringComparison.Ordinal) => Color.FromArgb(39, 174, 96),
+                    "待闭环" => Color.FromArgb(241, 196, 15),
+                    "已撤回" => TextMutedColor,
+                    _ => TextSecondaryColor
+                };
+            }
         };
 
         return grid;
@@ -1291,7 +2032,7 @@ internal sealed partial class InspectionPageControl : UserControl
 
         bool isDark = PageBackground.R < 100;
         using var axisPen = new Pen(SurfaceBorder, 1);
-        using var gridPen = new Pen(isDark ? Color.FromArgb(55, 62, 80) : Color.FromArgb(220, 225, 235), 1);
+        using var gridPen = new Pen(isDark ? Color.FromArgb(55, 62, 80) : Color.FromArgb(200, 209, 222), 1);
         using var labelBrush = new SolidBrush(TextMutedColor);
         using var labelFont = new Font("Microsoft YaHei UI", 8.5F);
 
@@ -1415,7 +2156,7 @@ internal sealed partial class InspectionPageControl : UserControl
         var donutRect = new Rectangle(24, Math.Max(20, (panel.Height - diameter) / 2), diameter, diameter);
 
         bool isDark = PageBackground.R < 100;
-        using var backPen = new Pen(isDark ? Color.FromArgb(55, 62, 80) : Color.FromArgb(215, 220, 232), 24);
+        using var backPen = new Pen(isDark ? Color.FromArgb(55, 62, 80) : Color.FromArgb(200, 209, 222), 24);
         g.DrawArc(backPen, donutRect, 0, 360);
 
         if (total > 0)
@@ -1443,7 +2184,7 @@ internal sealed partial class InspectionPageControl : UserControl
         g.DrawString(totalText, centerValueFont, centerBrush,
             donutRect.Left + donutRect.Width / 2F - totalSize.Width / 2,
             donutRect.Top + donutRect.Height / 2F - 22);
-        g.DrawString("总记录", centerTextFont, new SolidBrush(Color.FromArgb(99, 114, 130)),
+        g.DrawString("总记录", centerTextFont, new SolidBrush(TextMutedColor),
             donutRect.Left + donutRect.Width / 2F - 22,
             donutRect.Top + donutRect.Height / 2F + 6);
 

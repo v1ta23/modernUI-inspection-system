@@ -29,11 +29,18 @@ internal sealed class AppCompositionRoot
             AppDomain.CurrentDomain.BaseDirectory,
             "data",
             "inspection-records.json");
+        var inspectionTemplatePath = Path.Combine(
+            AppDomain.CurrentDomain.BaseDirectory,
+            "data",
+            "inspection-templates.json");
         var inspectionRecordRepository = new JsonInspectionRecordRepository(inspectionRecordPath);
+        var inspectionTemplateRepository = new JsonInspectionTemplateRepository(inspectionTemplatePath);
 
         _authenticationService = new AuthenticationService(userRepository, rememberMeRepository);
         _dashboardService = new DashboardService(dashboardRepository);
-        _inspectionRecordService = new InspectionRecordService(inspectionRecordRepository);
+        _inspectionRecordService = new InspectionRecordService(
+            inspectionRecordRepository,
+            inspectionTemplateRepository);
     }
 
     public LoginForm CreateLoginForm()

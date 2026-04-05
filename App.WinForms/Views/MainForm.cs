@@ -18,7 +18,8 @@ namespace App.WinForms.Views
                 ControlStyles.UserPaint |
                 ControlStyles.AllPaintingInWmPaint |
                 ControlStyles.OptimizedDoubleBuffer |
-                ControlStyles.ResizeRedraw,
+                ControlStyles.ResizeRedraw |
+                ControlStyles.SupportsTransparentBackColor,
                 true);
             DoubleBuffered = true;
             UpdateStyles();
@@ -32,6 +33,7 @@ namespace App.WinForms.Views
 
         private readonly DashboardViewModel _dashboard;
         private readonly InspectionPageControl _inspectionPage;
+        private readonly InspectionAnalyticsControl _analyticsPage;
 
         private readonly struct ThemePalette
         {
@@ -68,6 +70,18 @@ namespace App.WinForms.Views
             public Color Glass { get; }
         }
 
+        private const string SidebarIconFontFamily = "Segoe MDL2 Assets";
+
+        private enum SidebarGlyph
+        {
+            Home,
+            Page,
+            Chart,
+            Notification,
+            Setting,
+            User
+        }
+
         // ==================== DWM / Acrylic APIs ====================
         [DllImport("user32.dll")]
         private static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WindowCompositionAttributeData data);
@@ -102,7 +116,7 @@ namespace App.WinForms.Views
         private static readonly Color BgDark = Color.FromArgb(10, 10, 15);
         private static readonly Color BgCard = Color.FromArgb(28, 30, 40);
         private static readonly Color BgCardHover = Color.FromArgb(40, 42, 55);
-        private static readonly Color BgSidebar = Color.FromArgb(16, 16, 22);
+        private static readonly Color BgSidebar = Color.FromArgb(22, 24, 33);
         private static readonly Color AccentBlue = Color.FromArgb(88, 130, 255);
         private static readonly Color AccentPurple = Color.FromArgb(148, 90, 255);
         private static readonly Color AccentCyan = Color.FromArgb(50, 210, 220);
@@ -119,16 +133,6 @@ namespace App.WinForms.Views
             Color.FromArgb(160, 170, 190),
             Color.FromArgb(80, 85, 110),
             Color.FromArgb(204, 10, 10, 15));
-        private static readonly ThemePalette LightTheme = new(
-            Color.FromArgb(214, 226, 240),
-            Color.FromArgb(255, 255, 255),
-            Color.FromArgb(248, 250, 252),
-            Color.FromArgb(215, 222, 235),
-            Color.FromArgb(0, 0, 0),
-            Color.FromArgb(40, 45, 50),
-            Color.FromArgb(90, 100, 115),
-            Color.FromArgb(150, 160, 180),
-            Color.FromArgb(110, 225, 230, 238));
 
         // ==================== 动画相关 ====================
         private System.Windows.Forms.Timer _animTimer = null!;
@@ -151,6 +155,10 @@ namespace App.WinForms.Views
         {
             _dashboard = dashboard;
             _inspectionPage = new InspectionPageControl(account, inspectionController)
+            {
+                Visible = false
+            };
+            _analyticsPage = new InspectionAnalyticsControl(inspectionController)
             {
                 Visible = false
             };
@@ -198,7 +206,7 @@ namespace App.WinForms.Views
         }
 
         // ==================== 启用深色标题栏 (Win11优先) ====================
-        private ThemePalette CurrentTheme => _isDarkTheme ? DarkTheme : LightTheme;
+        private ThemePalette CurrentTheme => DarkTheme;
 
         private Color MainAreaBackground => CurrentTheme.Background;
 
@@ -207,7 +215,7 @@ namespace App.WinForms.Views
             try
             {
                 // DWMWA_USE_IMMERSIVE_DARK_MODE = 20
-                int darkMode = _isDarkTheme ? 1 : 0;
+                int darkMode = 1;
                 DwmSetWindowAttribute(this.Handle, 20, ref darkMode, sizeof(int));
 
                 // DWMWA_WINDOW_CORNER_PREFERENCE = 33 (圆角 = 2)
@@ -369,7 +377,9 @@ namespace App.WinForms.Views
             homeView.Controls.Add(headerPanel);
 
             _inspectionPage.Dock = DockStyle.Fill;
+            _analyticsPage.Dock = DockStyle.Fill;
             mainArea.Controls.Add(_inspectionPage);
+            mainArea.Controls.Add(_analyticsPage);
             mainArea.Controls.Add(homeView);
 
             this.Controls.Add(mainArea);
@@ -393,31 +403,18 @@ namespace App.WinForms.Views
             if (!_windowEffectsSuspended)
                 EnableAcrylicBlur();
             
-            _inspectionPage?.ApplyTheme(_isDarkTheme);
-            UpdateThemeToggleButton();
+            _inspectionPage?.ApplyTheme();
+            _analyticsPage?.ApplyTheme();
             InvalidateControlTree(this);
-        }
-
-        private void UpdateThemeToggleButton()
-        {
-            if (_themeToggleButton == null)
-                return;
-
-            _themeToggleButton.Invalidate();
-        }
-
-        private void ToggleTheme()
-        {
-            _isDarkTheme = !_isDarkTheme;
-            ApplyTheme();
         }
 
         private void SwitchSection(int index)
         {
             var showInspection = index == 1;
+            var showAnalytics = index == 2;
             if (_homeView != null)
             {
-                _homeView.Visible = !showInspection;
+                _homeView.Visible = !showInspection && !showAnalytics;
             }
 
             if (_inspectionPage != null)
@@ -429,17 +426,32 @@ namespace App.WinForms.Views
                     _inspectionPage.RefreshData();
                 }
             }
+
+            if (_analyticsPage != null)
+            {
+                _analyticsPage.Visible = showAnalytics;
+                if (showAnalytics)
+                {
+                    _analyticsPage.RefreshData();
+                }
+            }
         }
 
         // ==================== 侧栏 ====================
         private Panel CreateSidebar()
         {
+            const int sidebarWidth = 96;
+            const int avatarSize = 48;
+            const int navButtonSize = 56;
+            const int navButtonStep = 62;
+            const int navStartY = 88;
+
             var sidebar = new BufferedPanel
             {
                 Dock = DockStyle.Left,
-                Width = 72,
+                Width = sidebarWidth,
                 BackColor = CurrentTheme.Sidebar,
-                Padding = new Padding(0, 15, 0, 15)
+                Padding = new Padding(0, 18, 0, 18)
             };
             _sidebar = sidebar;
 
@@ -451,15 +463,39 @@ namespace App.WinForms.Views
                 g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
 
                 // 右侧分割线（纯色细线，不用渐变）
-                using var divPen = new Pen(CurrentTheme.Border, 1);
-                g.DrawLine(divPen, sidebar.Width - 1, 0, sidebar.Width - 1, sidebar.Height);
+                var sidebarRect = new Rectangle(0, 0, sidebar.Width - 1, sidebar.Height - 1);
+                using var bgBrush = new SolidBrush(CurrentTheme.Sidebar);
+                g.FillRectangle(bgBrush, sidebarRect);
+
+                using var topGlow = new LinearGradientBrush(
+                    new Rectangle(0, 0, sidebar.Width, 180),
+                    Color.FromArgb(8, 255, 255, 255),
+                    Color.FromArgb(0, 255, 255, 255),
+                    90f);
+                g.FillRectangle(topGlow, 0, 0, sidebar.Width, 180);
+
+                using var accentGlow = new LinearGradientBrush(
+                    new Rectangle(0, navStartY - 28, sidebar.Width, 260),
+                    Color.FromArgb(5, AccentBlue),
+                    Color.FromArgb(0, AccentBlue),
+                    90f);
+                g.FillRectangle(accentGlow, 0, navStartY - 28, sidebar.Width, 260);
+
+                using var innerHighlightPen = new Pen(Color.FromArgb(14, 255, 255, 255), 1);
+                g.DrawLine(innerHighlightPen, 0, 0, 0, sidebar.Height);
+
+                using var edgePen = new Pen(Color.FromArgb(54, 88, 98, 126), 1);
+                g.DrawLine(edgePen, sidebar.Width - 1, 0, sidebar.Width - 1, sidebar.Height);
+
+                using var separatorPen = new Pen(Color.FromArgb(10, 255, 255, 255), 1);
+                g.DrawLine(separatorPen, sidebar.Width - 2, 0, sidebar.Width - 2, sidebar.Height);
             };
 
             // 顶部用户头像（原Logo位置）
             var avatarPanel = new BufferedPanel
             {
-                Size = new Size(40, 40),
-                Location = new Point(16, 14),
+                Size = new Size(avatarSize, avatarSize),
+                Location = new Point((sidebarWidth - avatarSize) / 2, 18),
                 BackColor = Color.Transparent,
                 Cursor = Cursors.Hand
             };
@@ -469,48 +505,63 @@ namespace App.WinForms.Views
                 g.SmoothingMode = SmoothingMode.AntiAlias;
                 g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
 
-                var rect = new Rectangle(0, 0, 39, 39);
-                var path = CreateRoundRectPath(rect, 19);
+                var shadowRect = new Rectangle(1, 3, avatarSize - 4, avatarSize - 4);
+                using var shadowPath = CreateRoundRectPath(shadowRect, 16);
+                using var shadowBrush = new SolidBrush(Color.FromArgb(22, 0, 0, 0));
+                g.FillPath(shadowBrush, shadowPath);
 
-                using var bgBrush = new SolidBrush(_isDarkTheme 
-                    ? Color.FromArgb(25, 255, 255, 255)
-                    : Color.FromArgb(235, 240, 245));
-                g.FillPath(bgBrush, path);
+                var tileRect = new Rectangle(0, 0, avatarSize - 1, avatarSize - 1);
+                using var tilePath = CreateRoundRectPath(tileRect, 16);
+                using var bgBrush = new LinearGradientBrush(
+                    tileRect,
+                    Color.FromArgb(44, 47, 61),
+                    Color.FromArgb(31, 34, 46),
+                    90f);
+                g.FillPath(bgBrush, tilePath);
 
-                using var borderPen = new Pen(_isDarkTheme
-                    ? Color.FromArgb(45, 255, 255, 255)
-                    : Color.FromArgb(158, 172, 192), 1.2f);
-                g.DrawPath(borderPen, path);
+                using var tintBrush = new SolidBrush(Color.FromArgb(10, AccentBlue));
+                g.FillPath(tintBrush, tilePath);
 
-                using var font = new Font("Segoe UI Emoji", 14);
-                string icon = "👤"; 
-                using var textBrush = new SolidBrush(CurrentTheme.TextSecondary);
-                var ts = g.MeasureString(icon, font);
-                g.DrawString(icon, font, textBrush, (40 - ts.Width) / 2, (40 - ts.Height) / 2);
+                using var borderPen = new Pen(Color.FromArgb(54, 255, 255, 255), 1f);
+                g.DrawPath(borderPen, tilePath);
+
+                DrawSidebarGlyph(
+                    g,
+                    new Rectangle(0, 0, avatarSize, avatarSize),
+                    SidebarGlyph.User,
+                    Color.FromArgb(232, 236, 244),
+                    20);
             };
             sidebar.Controls.Add(avatarPanel);
 
             // 活动指示器
             _navIndicator = new Panel
             {
-                Size = new Size(3, 32),
-                Location = new Point(0, 70),
-                BackColor = AccentBlue
+                Size = new Size(2, 18),
+                Location = new Point(10, navStartY + 22),
+                BackColor = Color.FromArgb(150, AccentBlue)
             };
             sidebar.Controls.Add(_navIndicator);
 
-            // 导航项（Unicode图标）
-            string[] icons = { "🏠", "📝", "⚡", "🔔", "⚙" };
-            string[] tips = { "首页", "点检记录", "性能", "通知", "设置" };
+            // 导航项
+            SidebarGlyph[] glyphs =
+            {
+                SidebarGlyph.Home,
+                SidebarGlyph.Page,
+                SidebarGlyph.Chart,
+                SidebarGlyph.Notification,
+                SidebarGlyph.Setting
+            };
+            string[] tips = { "首页", "点检记录", "统计分析", "通知", "设置" };
 
-            for (int i = 0; i < icons.Length; i++)
+            for (int i = 0; i < glyphs.Length; i++)
             {
                 int idx = i;
                 bool isHovered = false;
                 var navBtn = new BufferedPanel
                 {
-                    Size = new Size(72, 48),
-                    Location = new Point(0, 65 + i * 52),
+                    Size = new Size(sidebarWidth, navButtonStep),
+                    Location = new Point(0, navStartY + i * navButtonStep),
                     BackColor = Color.Transparent,
                     Cursor = Cursors.Hand
                 };
@@ -518,7 +569,7 @@ namespace App.WinForms.Views
                 var tt = new ToolTip();
                 tt.SetToolTip(navBtn, tips[i]);
 
-                string icon = icons[i];
+                var glyph = glyphs[i];
 
                 navBtn.Paint += (s, e) =>
                 {
@@ -530,43 +581,50 @@ namespace App.WinForms.Views
                     // 激活=蓝色  悬停=亮白  默认=柔灰
                     Color color;
                     if (active)
-                        color = AccentBlue;
+                        color = Color.FromArgb(122, 158, 255);
                     else if (isHovered)
-                        color = _isDarkTheme ? Color.FromArgb(210, 210, 225) : CurrentTheme.TextPrimary;
+                        color = Color.FromArgb(236, 240, 247);
                     else
-                        color = CurrentTheme.TextSecondary;
+                        color = Color.FromArgb(176, 184, 199);
 
                     // 悬停/激活背景
                     if (active)
                     {
-                        var bgRect = new Rectangle(8, 6, 56, 36);
-                        var bgPath = CreateRoundRectPath(bgRect, 10);
+                        var bgRect = new Rectangle((navBtn.Width - navButtonSize) / 2, 5, navButtonSize, navButtonSize);
+                        var bgPath = CreateRoundRectPath(bgRect, 15);
                         using var bgBrush = new SolidBrush(_isDarkTheme
-                            ? Color.FromArgb(25, AccentBlue)
+                            ? Color.FromArgb(42, 46, 62)
                             : Color.FromArgb(42, AccentBlue));
                         g.FillPath(bgBrush, bgPath);
+                        using var tintBrush = new SolidBrush(Color.FromArgb(14, AccentBlue));
+                        g.FillPath(tintBrush, bgPath);
+                        using var borderPen = new Pen(Color.FromArgb(92, 148, 174, 255), 1f);
+                        g.DrawPath(borderPen, bgPath);
                     }
                     else if (isHovered)
                     {
-                        var bgRect = new Rectangle(8, 6, 56, 36);
-                        var bgPath = CreateRoundRectPath(bgRect, 10);
+                        var bgRect = new Rectangle((navBtn.Width - navButtonSize) / 2, 5, navButtonSize, navButtonSize);
+                        var bgPath = CreateRoundRectPath(bgRect, 15);
                         using var bgBrush = new SolidBrush(_isDarkTheme
-                            ? Color.FromArgb(15, 255, 255, 255)
+                            ? Color.FromArgb(34, 38, 50)
                             : Color.FromArgb(238, 245, 252));
                         g.FillPath(bgBrush, bgPath);
+                        using var borderPen = new Pen(Color.FromArgb(36, 255, 255, 255), 1f);
+                        g.DrawPath(borderPen, bgPath);
                     }
 
-                    using var font = new Font("Segoe UI Emoji", 16);
-                    var textSize = g.MeasureString(icon, font);
-                    using var iconBrush = new SolidBrush(color);
-                    g.DrawString(icon, font, iconBrush,
-                        (72 - textSize.Width) / 2, (48 - textSize.Height) / 2);
+                    DrawSidebarGlyph(
+                        g,
+                        new Rectangle((navBtn.Width - navButtonSize) / 2, 5, navButtonSize, navButtonSize),
+                        glyph,
+                        color,
+                        active ? 24 : 23);
                 };
 
                 navBtn.Click += (s, e) =>
                 {
                     _activeNavIndex = idx;
-                    _navIndicator.Location = new Point(0, 70 + idx * 52 + 8);
+                    _navIndicator.Location = new Point(10, navBtn.Top + (navBtn.Height - _navIndicator.Height) / 2);
                     SwitchSection(idx);
                     foreach (var item in _navItems)
                         item.Invalidate();
@@ -597,14 +655,15 @@ namespace App.WinForms.Views
             {
                 Size = new Size(40, 44),
                 Cursor = Cursors.Hand,
-                BackColor = Color.Transparent
+                BackColor = Color.Transparent,
+                Enabled = false,
+                Visible = false
             };
 
             bool isThemeHovered = false;
             _themeToggleButton.MouseEnter += (s, e) => { isThemeHovered = true; _themeToggleButton.Invalidate(); };
             _themeToggleButton.MouseLeave += (s, e) => { isThemeHovered = false; _themeToggleButton.Invalidate(); };
 
-            _themeToggleButton.Click += (s, e) => ToggleTheme();
             _themeToggleButton.Paint += (s, e) =>
             {
                 var g = e.Graphics;
@@ -670,7 +729,7 @@ namespace App.WinForms.Views
                 var timeSize = g.MeasureString(timeStr, subFont);
                 int timeA = _isDarkTheme ? 180 : 255;
                 using var timeBrush = new SolidBrush(Color.FromArgb((int)(alpha * timeA), headerTextColor));
-                var timeX = header.Width - timeSize.Width - 75;
+                var timeX = header.Width - timeSize.Width - 18;
                 g.DrawString(timeStr, subFont, timeBrush, timeX, 24);
 
                 var titleRect = new RectangleF(10, 10, Math.Max(240, timeX - 28), 44);
@@ -682,7 +741,6 @@ namespace App.WinForms.Views
                 g.DrawString(_dashboard.HeaderSubtitle, subFont, subtitleBrush, subtitleRect, headerTextFormat);
             };
 
-            UpdateThemeToggleButton();
             return header;
         }
 
@@ -1003,6 +1061,34 @@ namespace App.WinForms.Views
             path.AddArc(rect.X, rect.Bottom - d, d, d, 90, 90);
             path.CloseFigure();
             return path;
+        }
+
+        private static void DrawSidebarGlyph(
+            Graphics g,
+            Rectangle bounds,
+            SidebarGlyph glyph,
+            Color color,
+            float size)
+        {
+            using var font = new Font(SidebarIconFontFamily, size, FontStyle.Regular, GraphicsUnit.Pixel);
+            TextRenderer.DrawText(
+                g,
+                glyph switch
+                {
+                    SidebarGlyph.Home => "\uE80F",
+                    SidebarGlyph.Page => "\uE7C3",
+                    SidebarGlyph.Chart => "\uE9D9",
+                    SidebarGlyph.Notification => "\uE7E7",
+                    SidebarGlyph.Setting => "\uE713",
+                    SidebarGlyph.User => "\uE77B",
+                    _ => string.Empty
+                },
+                font,
+                bounds,
+                color,
+                TextFormatFlags.HorizontalCenter |
+                TextFormatFlags.VerticalCenter |
+                TextFormatFlags.NoPadding);
         }
 
         private static uint ToAbgr(Color color)

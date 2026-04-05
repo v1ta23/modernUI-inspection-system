@@ -52,7 +52,9 @@ internal sealed class InspectionExcelExporter
         dataSheet.Cell(1, 5).Value = "点检人";
         dataSheet.Cell(1, 6).Value = "状态";
         dataSheet.Cell(1, 7).Value = "测量值";
-        dataSheet.Cell(1, 8).Value = "备注";
+        dataSheet.Cell(1, 8).Value = "闭环状态";
+        dataSheet.Cell(1, 9).Value = "处理说明";
+        dataSheet.Cell(1, 10).Value = "原始备注";
 
         for (var index = 0; index < result.Records.Count; index++)
         {
@@ -65,14 +67,43 @@ internal sealed class InspectionExcelExporter
             dataSheet.Cell(row, 5).Value = record.Inspector;
             dataSheet.Cell(row, 6).Value = record.Status.ToDisplayText();
             dataSheet.Cell(row, 7).Value = record.MeasuredValue;
-            dataSheet.Cell(row, 8).Value = record.Remark;
+            dataSheet.Cell(row, 8).Value = BuildClosureStateText(record);
+            dataSheet.Cell(row, 9).Value = BuildActionRemark(record);
+            dataSheet.Cell(row, 10).Value = record.Remark;
         }
 
-        var headerRange = dataSheet.Range(1, 1, 1, 8);
+        var headerRange = dataSheet.Range(1, 1, 1, 10);
         headerRange.Style.Font.Bold = true;
         headerRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#DCEBFF");
         dataSheet.Columns().AdjustToContents();
 
         workbook.SaveAs(filePath);
+    }
+
+    private static string BuildClosureStateText(InspectionRecord record)
+    {
+        if (record.IsRevoked)
+        {
+            return "已撤回";
+        }
+
+        if (record.Status == InspectionStatus.Normal)
+        {
+            return "无需闭环";
+        }
+
+        return record.ClosedAt.HasValue
+            ? $"已闭环 {record.ClosedAt:MM-dd HH:mm}"
+            : "待闭环";
+    }
+
+    private static string BuildActionRemark(InspectionRecord record)
+    {
+        if (record.IsRevoked)
+        {
+            return record.RevokeReason ?? string.Empty;
+        }
+
+        return record.ClosureRemark ?? string.Empty;
     }
 }

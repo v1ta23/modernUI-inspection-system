@@ -9,4 +9,11 @@ public sealed record InspectionRecord(
     InspectionStatus Status,
     decimal MeasuredValue,
     DateTime CheckedAt,
-    string Remark);
+    string Remark,
+    DateTime? ClosedAt = null,
+    string? ClosedBy = null,
+    string? ClosureRemark = null,
+    bool IsRevoked = false,
+    DateTime? RevokedAt = null,
+    string? RevokedBy = null,
+    string? RevokeReason = null);

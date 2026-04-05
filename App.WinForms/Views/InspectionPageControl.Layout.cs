@@ -6,19 +6,20 @@ internal sealed partial class InspectionPageControl
 {
     private Control BuildLayout()
     {
-        var root = new BufferedPanel
+        var root = new WorkspacePanel
         {
             Dock = DockStyle.Fill,
-            Padding = new Padding(20)
+            Padding = new Padding(20),
+            BackColor = PageBackground
         };
 
         var contentHost = new BufferedPanel
         {
             Dock = DockStyle.Fill,
-            BackColor = Color.Transparent
+            BackColor = PageBackground
         };
+        _contentHost = contentHost;
         contentHost.Controls.Add(BuildDashboardPanel());
-        contentHost.Controls.Add(BuildChartsDrawer());
 
         root.Controls.Add(contentHost);
         root.Controls.Add(BuildHeaderPanel());
@@ -92,9 +93,9 @@ internal sealed partial class InspectionPageControl
             WrapContents = false,
             BackColor = Color.Transparent
         };
-        _toggleChartsButton.Margin = Padding.Empty;
+        _manageTemplatesButton.Margin = new Padding(8, 0, 0, 0);
         _toggleEntryPanelButton.Margin = new Padding(8, 0, 0, 0);
-        _headerActionPanel.Controls.Add(_toggleChartsButton);
+        _headerActionPanel.Controls.Add(_manageTemplatesButton);
         _headerActionPanel.Controls.Add(_toggleEntryPanelButton);
 
         _refreshLabel.AutoSize = false;
@@ -132,6 +133,7 @@ internal sealed partial class InspectionPageControl
             ForeColor = Color.FromArgb(31, 41, 55),
             Text = "\u70b9\u68c0\u8bb0\u5f55\u5f55\u5165"
         };
+        _entryTitleLabel = titleLabel;
 
         var subtitleLabel = new Label
         {
@@ -139,6 +141,7 @@ internal sealed partial class InspectionPageControl
             ForeColor = Color.FromArgb(99, 114, 130),
             Text = "\u65b0\u5f55\u5165\u7684\u6570\u636e\u4f1a\u7acb\u5373\u8fdb\u5165\u67e5\u8be2\u5217\u8868\u548c\u76d1\u63a7\u56fe\u8868\u3002"
         };
+        _entrySubtitleLabel = subtitleLabel;
 
         subtitleLabel.Location = new Point(0, 30);
 
@@ -162,6 +165,7 @@ internal sealed partial class InspectionPageControl
         };
         formTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
 
+        AddInputRow(formTable, "\u53f0\u8d26\u6a21\u677f", _entryTemplateCombo);
         AddInputRow(formTable, "\u4ea7\u7ebf", _entryLineCombo);
         AddInputRow(formTable, "\u8bbe\u5907\u540d\u79f0", _entryDeviceTextBox);
         AddInputRow(formTable, "\u70b9\u68c0\u9879\u76ee", _entryItemTextBox);
@@ -181,11 +185,15 @@ internal sealed partial class InspectionPageControl
         };
 
         var saveButton = CreatePrimaryButton("\u4fdd\u5b58\u8bb0\u5f55");
+        _entrySaveButton = saveButton;
         saveButton.Click += OnSaveClicked;
+        _saveTemplateButton.Margin = new Padding(0, 0, 8, 0);
         var resetButton = CreateSecondaryButton("\u91cd\u7f6e\u8868\u5355");
-        resetButton.Click += (_, _) => ResetEntryForm();
+        _entryResetButton = resetButton;
+        resetButton.Click += OnResetEntryClicked;
 
         buttonPanel.Controls.Add(saveButton);
+        buttonPanel.Controls.Add(_saveTemplateButton);
         buttonPanel.Controls.Add(resetButton);
 
         formTable.Controls.Add(buttonPanel, 0, formTable.RowCount);
@@ -207,8 +215,9 @@ internal sealed partial class InspectionPageControl
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 3,
-            BackColor = Color.Transparent
+            BackColor = PageBackground
         };
+        _dashboardLayout = layout;
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -248,6 +257,7 @@ internal sealed partial class InspectionPageControl
         };
 
         _filterKeywordBlock = CreateFilterBlock("\u5173\u952e\u8bcd", _filterKeywordTextBox);
+        _filterDeviceBlock = CreateFilterBlock("\u8bbe\u5907\u540d\u79f0", _filterDeviceTextBox);
         _filterLineBlock = CreateFilterBlock("\u4ea7\u7ebf", _filterLineCombo);
         _filterStatusBlock = CreateFilterBlock("\u72b6\u6001", _filterStatusCombo);
         _filterStartBlock = CreateFilterBlock("\u5f00\u59cb\u65f6\u95f4", _filterStartPicker);
@@ -277,6 +287,8 @@ internal sealed partial class InspectionPageControl
         _filterActionPanel.Controls.Add(searchButton);
         _filterActionPanel.Controls.Add(clearButton);
         _filterActionPanel.Controls.Add(exportButton);
+        _filterIncludeRevokedCheckBox.Margin = new Padding(12, 8, 0, 0);
+        _filterActionPanel.Controls.Add(_filterIncludeRevokedCheckBox);
         _filterActionBlock = CreateFilterBlock("\u64cd\u4f5c", _filterActionPanel);
         _filterActionBlock.Margin = Padding.Empty;
 
@@ -293,8 +305,9 @@ internal sealed partial class InspectionPageControl
             Dock = DockStyle.Fill,
             ColumnCount = 5,
             RowCount = 1,
-            BackColor = Color.Transparent
+            BackColor = PageBackground
         };
+        _metricsPanel = table;
 
         for (var index = 0; index < 5; index++)
         {
@@ -313,6 +326,7 @@ internal sealed partial class InspectionPageControl
     {
         var panel = CreateSurfacePanel();
         panel.Dock = DockStyle.Fill;
+        panel.Margin = Padding.Empty;
         panel.Padding = new Padding(20, 16, 20, 20);
 
         var titleLabel = new Label
@@ -337,7 +351,7 @@ internal sealed partial class InspectionPageControl
             Dock = DockStyle.Right,
             Width = 430,
             Padding = new Padding(16, 0, 0, 0),
-            BackColor = Color.Transparent,
+            BackColor = PageBackground,
             Visible = false
         };
         _chartsPanel = drawerHost;
@@ -409,11 +423,13 @@ internal sealed partial class InspectionPageControl
             Orientation = Orientation.Horizontal,
             FixedPanel = FixedPanel.None,
             SplitterWidth = 8,
-            BackColor = Color.Transparent
+            BackColor = PageBackground
         };
         _chartsSplitContainer = split;
         split.Panel1MinSize = 40;
         split.Panel2MinSize = 40;
+        split.Panel1.BackColor = PageBackground;
+        split.Panel2.BackColor = PageBackground;
         split.Panel1.Padding = new Padding(0, 0, 0, 10);
         split.Panel2.Padding = new Padding(0, 10, 0, 0);
 
@@ -575,7 +591,7 @@ internal sealed partial class InspectionPageControl
     {
         return new CardPanel
         {
-            BackColor = Color.Transparent,
+            BackColor = SurfaceBackground,
             Margin = new Padding(0, 0, 0, 14)
         };
     }
