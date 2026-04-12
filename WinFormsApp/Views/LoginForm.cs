@@ -209,7 +209,7 @@ internal sealed class LoginForm : Form
         MaximizeBox = true;
         MinimizeBox = true;
         ClientSize = new Size(760, 700);
-        MinimumSize = new Size(680, 580);
+        MinimumSize = new Size(680, 700);
         Font = new Font("Microsoft YaHei UI", 9F);
         BackColor = WindowBackground;
         Padding = new Padding(24);

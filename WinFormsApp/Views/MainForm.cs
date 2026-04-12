@@ -905,13 +905,15 @@ namespace WinFormsApp.Views
                 Text = activity.Text
             };
 
+            var timeLabelFont = new Font("Microsoft YaHei UI", 8.8F);
             var timeLabel = new Label
             {
                 AutoSize = true,
                 Dock = DockStyle.Right,
-                Font = new Font("Microsoft YaHei UI", 8.8F),
+                Font = timeLabelFont,
                 ForeColor = PageChrome.TextMuted,
                 Margin = new Padding(12, 0, 0, 0),
+                MinimumSize = new Size(TextRenderer.MeasureText(activity.Time, timeLabelFont).Width + 6, 0),
                 Text = activity.Time
             };
 
@@ -1734,17 +1736,13 @@ namespace WinFormsApp.Views
 
                 // 右上角 - 时间显示
                 string timeStr = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
-                var timeFont = SelectSingleLineFont(timeStr, HeaderSubtitleFonts, 180F);
-                var timeSize = MeasureSingleLineText(timeStr, timeFont);
+                var timeRight = Math.Max(18F, _themeToggleButton.Left - 18F);
+                var timeFont = SelectSingleLineFont(timeStr, HeaderSubtitleFonts, Math.Max(120F, timeRight - 12F));
+                var timeSize = g.MeasureString(timeStr, timeFont);
                 int timeA = _isDarkTheme ? 180 : 255;
                 using var timeBrush = new SolidBrush(Color.FromArgb((int)(alpha * timeA), headerTextColor));
-                var timeX = header.Width - timeSize.Width - 18F;
-                g.DrawString(
-                    timeStr,
-                    timeFont,
-                    timeBrush,
-                    new RectangleF(timeX, 24F, timeSize.Width + 2F, timeSize.Height + 4F),
-                    TopAlignedSingleLineTextFormat);
+                var timeX = Math.Max(12F, timeRight - timeSize.Width);
+                g.DrawString(timeStr, timeFont, timeBrush, new PointF(timeX, 24F));
 
                 var contentWidth = Math.Max(240F, timeX - 28F);
                 titleFont = SelectSingleLineFont(_dashboard.HeaderTitle, HeaderTitleFonts, contentWidth);
@@ -2018,18 +2016,15 @@ namespace WinFormsApp.Views
                         // 时间
                         var timeFont = ActivityTimeFont;
                         string timeStr = logs[i].Time;
-                        var timeSize = MeasureSingleLineText(timeStr, timeFont);
+                        var timeSize = g.MeasureString(timeStr, timeFont);
                         using var timeBrush = new SolidBrush(Color.FromArgb(_isDarkTheme ? Math.Min(120, logAlpha) : Math.Min(190, logAlpha), CurrentTheme.TextMuted));
-                        g.DrawString(
-                            timeStr,
-                            timeFont,
-                            timeBrush,
-                            new RectangleF(leftRect.Right - timeSize.Width - 24F, logY, timeSize.Width + 2F, logH),
-                            CenteredSingleLineTextFormat);
+                        var timeX = leftRect.Right - timeSize.Width - 24F;
+                        var timeY = logY + Math.Max(0F, (logH - timeSize.Height) / 2F);
+                        g.DrawString(timeStr, timeFont, timeBrush, new PointF(timeX, timeY));
                         var logRect = new RectangleF(
                             statusRect.Right + 12,
                             logY,
-                            Math.Max(40, leftRect.Right - timeSize.Width - 36 - (statusRect.Right + 12)),
+                            Math.Max(40F, timeX - 12F - (statusRect.Right + 12F)),
                             logH);
                         g.DrawString(logText, logFont, logBrush, logRect, CenteredSingleLineTextFormat);
 
