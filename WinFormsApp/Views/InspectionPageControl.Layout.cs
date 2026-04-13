@@ -167,7 +167,7 @@ internal sealed partial class InspectionPageControl
 
         AddInputRow(formTable, "\u53f0\u8d26\u6a21\u677f", _entryTemplateCombo);
         AddInputRow(formTable, "\u4ea7\u7ebf", _entryLineCombo);
-        AddInputRow(formTable, "\u8bbe\u5907\u540d\u79f0", _entryDeviceTextBox);
+        AddInputRow(formTable, "\u8bbe\u5907\u540d\u79f0", _entryDeviceCombo);
         AddInputRow(formTable, "\u70b9\u68c0\u9879\u76ee", _entryItemTextBox);
         AddInputRow(formTable, "\u70b9\u68c0\u4eba", _entryInspectorTextBox);
         AddInputRow(formTable, "\u70b9\u68c0\u72b6\u6001", _entryStatusCombo);

@@ -18,11 +18,12 @@ internal sealed partial class InspectionPageControl : UserControl, IInteractiveR
     private static Color AccentBlue = PageChrome.AccentBlue;
 
     private readonly InspectionController _controller;
+    private readonly DeviceManagementController _deviceManagementController;
     private readonly string _account;
 
     private readonly ComboBox _entryLineCombo;
     private readonly ComboBox _entryTemplateCombo;
-    private readonly TextBox _entryDeviceTextBox;
+    private readonly ComboBox _entryDeviceCombo;
     private readonly TextBox _entryItemTextBox;
     private readonly TextBox _entryInspectorTextBox;
     private readonly ComboBox _entryStatusCombo;
@@ -73,6 +74,7 @@ internal sealed partial class InspectionPageControl : UserControl, IInteractiveR
     private FlowLayoutPanel? _filterActionPanel;
     private InspectionDashboardViewModel _currentDashboard = new();
     private IReadOnlyList<InspectionTemplateViewModel> _currentTemplates = Array.Empty<InspectionTemplateViewModel>();
+    private IReadOnlyList<DeviceRowViewModel> _currentDevices = Array.Empty<DeviceRowViewModel>();
     private Control? _contentHost;
     private Control? _dashboardLayout;
     private Control? _metricsPanel;
@@ -86,6 +88,7 @@ internal sealed partial class InspectionPageControl : UserControl, IInteractiveR
     private bool _isDisposingFloatingWindows;
     private bool _isInteractiveResize;
     private bool _suppressTemplateSelectionChanged;
+    private bool _suppressDeviceSelectionChanged;
     private bool _suppressPresetReset;
     private bool _pendingOnlyOverride;
     private bool _screenInitialized;
@@ -275,10 +278,29 @@ internal sealed partial class InspectionPageControl : UserControl, IInteractiveR
         public override string ToString() => Text;
     }
 
-    public InspectionPageControl(string account, InspectionController controller)
+    private sealed class EntryDeviceOption
+    {
+        public EntryDeviceOption(string text, DeviceRowViewModel? device)
+        {
+            Text = text;
+            Device = device;
+        }
+
+        public string Text { get; }
+
+        public DeviceRowViewModel? Device { get; }
+
+        public override string ToString() => Text;
+    }
+
+    public InspectionPageControl(
+        string account,
+        InspectionController controller,
+        DeviceManagementController deviceManagementController)
     {
         _account = account;
         _controller = controller;
+        _deviceManagementController = deviceManagementController;
 
         Text = "点检记录中心";
         Dock = DockStyle.Fill;
@@ -289,7 +311,8 @@ internal sealed partial class InspectionPageControl : UserControl, IInteractiveR
         _entryTemplateCombo = CreateDropDownListComboBox();
         _entryTemplateCombo.SelectedIndexChanged += OnEntryTemplateChanged;
         _entryLineCombo = CreateEditableComboBox();
-        _entryDeviceTextBox = CreateTextBox();
+        _entryDeviceCombo = CreateEditableComboBox();
+        _entryDeviceCombo.SelectedIndexChanged += OnEntryDeviceChanged;
         _entryItemTextBox = CreateTextBox();
         _entryInspectorTextBox = CreateTextBox();
         _entryStatusCombo = CreateDropDownListComboBox();
@@ -524,7 +547,7 @@ internal sealed partial class InspectionPageControl : UserControl, IInteractiveR
         ResetEntryForm();
 
         _entryLineCombo.Text = record.LineName;
-        _entryDeviceTextBox.Text = record.DeviceName;
+        _entryDeviceCombo.Text = record.DeviceName;
         _entryItemTextBox.Text = record.InspectionItem;
         _entryInspectorTextBox.Text = record.Inspector;
         SelectStatus(record.Status);
@@ -532,6 +555,7 @@ internal sealed partial class InspectionPageControl : UserControl, IInteractiveR
         _entryCheckedAtPicker.Value = record.CheckedAtValue;
         _entryRemarkTextBox.Text = record.Remark;
         TrySelectTemplate(record.LineName, record.DeviceName, record.InspectionItem);
+        TrySelectDevice(record.LineName, record.DeviceName);
         _entryFeedbackLabel.ForeColor = AccentBlue;
         _entryFeedbackLabel.Text = "当前正在编辑所选记录。";
         ShowEntryWindow();
@@ -571,6 +595,95 @@ internal sealed partial class InspectionPageControl : UserControl, IInteractiveR
         _suppressTemplateSelectionChanged = false;
     }
 
+    private void UpdateDeviceOptions()
+    {
+        var currentDeviceText = _entryDeviceCombo.Text;
+        var selectedDeviceName = (_entryDeviceCombo.SelectedItem as EntryDeviceOption)?.Device?.DeviceName;
+        var dashboard = _deviceManagementController.Load(new DeviceFilterViewModel());
+        _currentDevices = dashboard.Devices
+            .OrderBy(device => device.LineName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(device => device.DeviceName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        _suppressDeviceSelectionChanged = true;
+        _entryDeviceCombo.BeginUpdate();
+        _entryDeviceCombo.Items.Clear();
+        _entryDeviceCombo.Items.Add(new EntryDeviceOption("手动输入设备", null));
+        foreach (var device in _currentDevices)
+        {
+            _entryDeviceCombo.Items.Add(new EntryDeviceOption(
+                $"{device.LineName} / {device.DeviceName}",
+                device));
+        }
+        _entryDeviceCombo.EndUpdate();
+
+        var selected = _entryDeviceCombo.Items
+            .OfType<EntryDeviceOption>()
+            .FirstOrDefault(option =>
+                option.Device is not null &&
+                (string.Equals(option.Device.DeviceName, selectedDeviceName, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(option.Device.DeviceName, currentDeviceText, StringComparison.OrdinalIgnoreCase)));
+
+        if (selected is not null)
+        {
+            _entryDeviceCombo.SelectedItem = selected;
+        }
+        else
+        {
+            _entryDeviceCombo.Text = currentDeviceText;
+        }
+
+        _suppressDeviceSelectionChanged = false;
+    }
+
+    private void TrySelectDevice(string lineName, string deviceName)
+    {
+        var matched = _entryDeviceCombo.Items
+            .OfType<EntryDeviceOption>()
+            .FirstOrDefault(option =>
+                option.Device is not null &&
+                string.Equals(option.Device.LineName, lineName, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(option.Device.DeviceName, deviceName, StringComparison.OrdinalIgnoreCase));
+
+        _suppressDeviceSelectionChanged = true;
+        if (matched is not null)
+        {
+            _entryDeviceCombo.SelectedItem = matched;
+        }
+        else
+        {
+            _entryDeviceCombo.Text = deviceName;
+        }
+
+        _suppressDeviceSelectionChanged = false;
+    }
+
+    private void OnEntryDeviceChanged(object? sender, EventArgs e)
+    {
+        if (_suppressDeviceSelectionChanged)
+        {
+            return;
+        }
+
+        if ((_entryDeviceCombo.SelectedItem as EntryDeviceOption)?.Device is not { } device)
+        {
+            return;
+        }
+
+        _entryLineCombo.Text = device.LineName;
+        _entryDeviceCombo.Text = device.DeviceName;
+        if (string.IsNullOrWhiteSpace(_entryInspectorTextBox.Text))
+        {
+            _entryInspectorTextBox.Text = device.Owner;
+        }
+
+        if (string.IsNullOrWhiteSpace(_entryRemarkTextBox.Text) &&
+            !string.IsNullOrWhiteSpace(device.Location))
+        {
+            _entryRemarkTextBox.Text = $"设备位置：{device.Location}";
+        }
+    }
+
     private void TrySelectTemplate(string lineName, string deviceName, string inspectionItem)
     {
         var matched = _entryTemplateCombo.Items
@@ -599,7 +712,7 @@ internal sealed partial class InspectionPageControl : UserControl, IInteractiveR
         }
 
         _entryLineCombo.Text = template.LineName;
-        _entryDeviceTextBox.Text = template.DeviceName;
+        TrySelectDevice(template.LineName, template.DeviceName);
         _entryItemTextBox.Text = template.InspectionItem;
         _entryInspectorTextBox.Text = template.DefaultInspector;
         if (string.IsNullOrWhiteSpace(_entryRemarkTextBox.Text))
@@ -915,7 +1028,7 @@ internal sealed partial class InspectionPageControl : UserControl, IInteractiveR
             var template = new InspectionTemplateViewModel
             {
                 LineName = _entryLineCombo.Text.Trim(),
-                DeviceName = _entryDeviceTextBox.Text.Trim(),
+                DeviceName = _entryDeviceCombo.Text.Trim(),
                 InspectionItem = _entryItemTextBox.Text.Trim(),
                 DefaultInspector = _entryInspectorTextBox.Text.Trim(),
                 DefaultRemark = _entryRemarkTextBox.Text.Trim()
@@ -1405,7 +1518,13 @@ internal sealed partial class InspectionPageControl : UserControl, IInteractiveR
             _suppressPresetReset = true;
             try
             {
-                UpdateLineOptions(dashboard.LineOptions);
+                UpdateDeviceOptions();
+                UpdateLineOptions(dashboard.LineOptions
+                    .Concat(_currentDevices.Select(device => device.LineName))
+                    .Where(line => !string.IsNullOrWhiteSpace(line))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(line => line, StringComparer.OrdinalIgnoreCase)
+                    .ToList());
                 UpdateTemplateOptions(dashboard.Templates);
                 UpdateSummary(dashboard);
                 UpdateGrid(dashboard.Records);
@@ -1518,6 +1637,7 @@ internal sealed partial class InspectionPageControl : UserControl, IInteractiveR
             if (_editingRecordId.HasValue)
             {
                 _controller.Update(_editingRecordId.Value, entry);
+                _deviceManagementController.EnsureDevicesFromInspection([entry]);
                 StartCreateEntry();
                 _entryFeedbackLabel.ForeColor = Color.FromArgb(39, 174, 96);
                 _entryFeedbackLabel.Text = $"已更新：{entry.DeviceName} / {entry.CheckedAt:yyyy-MM-dd HH:mm}";
@@ -1525,6 +1645,7 @@ internal sealed partial class InspectionPageControl : UserControl, IInteractiveR
             else
             {
                 _controller.Add(entry);
+                _deviceManagementController.EnsureDevicesFromInspection([entry]);
                 StartCreateEntry(keepLine: true, keepInspector: true);
                 _entryFeedbackLabel.ForeColor = Color.FromArgb(39, 174, 96);
                 _entryFeedbackLabel.Text = $"已保存：{entry.DeviceName} / {entry.CheckedAt:yyyy-MM-dd HH:mm}";
@@ -1596,7 +1717,7 @@ internal sealed partial class InspectionPageControl : UserControl, IInteractiveR
         return new InspectionEntryViewModel
         {
             LineName = _entryLineCombo.Text.Trim(),
-            DeviceName = _entryDeviceTextBox.Text.Trim(),
+            DeviceName = _entryDeviceCombo.Text.Trim(),
             InspectionItem = _entryItemTextBox.Text.Trim(),
             Inspector = _entryInspectorTextBox.Text.Trim(),
             Status = (_entryStatusCombo.SelectedItem as StatusOption)?.Value ?? InspectionStatus.Normal,
@@ -1760,7 +1881,7 @@ internal sealed partial class InspectionPageControl : UserControl, IInteractiveR
             _entryLineCombo.Text = string.Empty;
         }
 
-        _entryDeviceTextBox.Clear();
+        _entryDeviceCombo.Text = string.Empty;
         _entryItemTextBox.Clear();
         _entryInspectorTextBox.Text = keepInspector ? currentInspector : string.Empty;
         _entryStatusCombo.SelectedIndex = 0;

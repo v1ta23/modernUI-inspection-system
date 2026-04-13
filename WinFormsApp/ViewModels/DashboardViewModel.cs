@@ -9,6 +9,9 @@ internal enum DashboardNavigationTarget
     InspectionPending,
     InspectionAbnormal,
     InspectionCreate,
+    DeviceManagement,
+    DeviceMonitor,
+    AlarmCenter,
     Analytics
 }
 

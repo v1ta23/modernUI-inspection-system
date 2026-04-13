@@ -17,6 +17,7 @@ internal sealed class AlarmCenterPageControl : UserControl, IInteractiveResizeAw
 
     private readonly string _account;
     private readonly InspectionController _inspectionController;
+    private readonly DeviceManagementController _deviceManagementController;
     private readonly Label _generatedAtLabel;
     private readonly Control _layoutRoot;
     private readonly InteractiveResizeFreezeController _interactiveResizeController;
@@ -33,10 +34,14 @@ internal sealed class AlarmCenterPageControl : UserControl, IInteractiveResizeAw
 
     public event EventHandler? DataChanged;
 
-    public AlarmCenterPageControl(string account, InspectionController inspectionController)
+    public AlarmCenterPageControl(
+        string account,
+        InspectionController inspectionController,
+        DeviceManagementController deviceManagementController)
     {
         _account = account;
         _inspectionController = inspectionController;
+        _deviceManagementController = deviceManagementController;
         Dock = DockStyle.Fill;
         BackColor = PageBackground;
         Font = new Font("Microsoft YaHei UI", 9F);
@@ -77,15 +82,24 @@ internal sealed class AlarmCenterPageControl : UserControl, IInteractiveResizeAw
 
     public void RefreshData()
     {
-        var dashboard = _inspectionController.Load(new InspectionFilterViewModel());
-        var records = dashboard.Records
+        var inspectionDashboard = _inspectionController.Load(new InspectionFilterViewModel());
+        var deviceDashboard = _deviceManagementController.Load(new DeviceFilterViewModel());
+        var records = inspectionDashboard.Records
             .Where(record => !record.IsRevoked && record.Status != InspectionStatus.Normal)
             .OrderByDescending(record => record.CheckedAtValue)
             .ToList();
 
-        _pendingRows = records
+        var inspectionPendingRows = records
             .Where(record => !record.IsClosed)
             .Select(record => ToRow(record, "待处理"))
+            .ToList();
+        var devicePendingRows = deviceDashboard.Devices
+            .Where(device => device.Status != ManagedDeviceStatus.Active || string.IsNullOrWhiteSpace(device.CommunicationAddress))
+            .Select(ToDeviceAlarmRow)
+            .ToList();
+
+        _pendingRows = devicePendingRows
+            .Concat(inspectionPendingRows)
             .ToList();
 
         _historyRows = records
@@ -95,10 +109,10 @@ internal sealed class AlarmCenterPageControl : UserControl, IInteractiveResizeAw
             .ToList();
 
         _pendingValueLabel.Text = _pendingRows.Count.ToString();
-        _abnormalValueLabel.Text = _pendingRows.Count(row => row.StatusText == "异常").ToString();
-        _warningValueLabel.Text = _pendingRows.Count(row => row.StatusText == "预警").ToString();
+        _abnormalValueLabel.Text = _pendingRows.Count(row => row.Severity == AlarmSeverity.Abnormal).ToString();
+        _warningValueLabel.Text = _pendingRows.Count(row => row.Severity == AlarmSeverity.Warning).ToString();
         _closedValueLabel.Text = _historyRows.Count.ToString();
-        _generatedAtLabel.Text = $"最近刷新 {dashboard.GeneratedAt:yyyy-MM-dd HH:mm:ss}";
+        _generatedAtLabel.Text = $"最近刷新 {DateTime.Now:yyyy-MM-dd HH:mm:ss}";
 
         _pendingGrid.DataSource = _pendingRows.ToList();
         _historyGrid.DataSource = _historyRows.ToList();
@@ -165,7 +179,7 @@ internal sealed class AlarmCenterPageControl : UserControl, IInteractiveResizeAw
         _warningValueLabel = PageChrome.CreateValueLabel();
         _closedValueLabel = PageChrome.CreateValueLabel();
 
-        layout.Controls.Add(PageChrome.CreateMetricCard("待处理总数", DangerColor, _pendingValueLabel, PageChrome.CreateNoteLabel("未闭环的预警和异常")), 0, 0);
+        layout.Controls.Add(PageChrome.CreateMetricCard("待处理总数", DangerColor, _pendingValueLabel, PageChrome.CreateNoteLabel("巡检告警 + 设备台账提醒")), 0, 0);
         layout.Controls.Add(PageChrome.CreateMetricCard("异常", DangerColor, _abnormalValueLabel, PageChrome.CreateNoteLabel("优先级最高")), 1, 0);
         layout.Controls.Add(PageChrome.CreateMetricCard("预警", WarningColor, _warningValueLabel, PageChrome.CreateNoteLabel("可安排巡检复核")), 2, 0);
         layout.Controls.Add(PageChrome.CreateMetricCard("最近闭环", SuccessColor, _closedValueLabel, PageChrome.CreateNoteLabel("最近处理记录"), Padding.Empty), 3, 0);
@@ -192,7 +206,7 @@ internal sealed class AlarmCenterPageControl : UserControl, IInteractiveResizeAw
         _pendingGrid.Columns.Add(CreateTextColumn(nameof(AlarmRow.InspectionItem), "问题项", 140));
         _pendingGrid.Columns.Add(CreateTextColumn(nameof(AlarmRow.StatusText), "状态", 70));
         _pendingGrid.Columns.Add(CreateTextColumn(nameof(AlarmRow.ProcessingState), "处理状态", 100));
-        _pendingGrid.Columns.Add(CreateTextColumn(nameof(AlarmRow.Inspector), "巡检人", 90));
+        _pendingGrid.Columns.Add(CreateTextColumn(nameof(AlarmRow.Inspector), "负责人", 90));
         _pendingGrid.Columns.Add(CreateTextColumn(nameof(AlarmRow.Remark), "备注", 220));
         _pendingGrid.CellFormatting += GridOnCellFormatting;
         _pendingGrid.CellDoubleClick += (_, _) => CloseSelectedAlarm();
@@ -254,7 +268,10 @@ internal sealed class AlarmCenterPageControl : UserControl, IInteractiveResizeAw
             cellStyle.ForeColor = text switch
             {
                 "异常" => DangerColor,
+                "已停用" => DangerColor,
                 "预警" => WarningColor,
+                "维护中" => WarningColor,
+                "未配通信" => WarningColor,
                 _ => TextSecondaryColor
             };
         }
@@ -290,6 +307,12 @@ internal sealed class AlarmCenterPageControl : UserControl, IInteractiveResizeAw
             return;
         }
 
+        if (!row.CanClose || !row.RecordId.HasValue)
+        {
+            MessageBox.Show(this, "这是设备台账提醒，请到“设备台账”修改状态或补通信地址。", "设备提醒", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
         var closureRemark = ShowActionInputDialog(
             "告警闭环",
             $"请填写 {row.DeviceName} / {row.InspectionItem} 的处理说明。",
@@ -301,7 +324,7 @@ internal sealed class AlarmCenterPageControl : UserControl, IInteractiveResizeAw
 
         try
         {
-            CloseAlarm(row.RecordId, closureRemark);
+            CloseAlarm(row.RecordId.Value, closureRemark);
         }
         catch (Exception ex)
         {
@@ -419,14 +442,50 @@ internal sealed class AlarmCenterPageControl : UserControl, IInteractiveResizeAw
         return new AlarmRow
         {
             RecordId = record.Id,
+            CanClose = !record.IsClosed,
             CheckedAt = record.CheckedAtValue.ToString("MM-dd HH:mm"),
             LineName = record.LineName,
             DeviceName = record.DeviceName,
             InspectionItem = record.InspectionItem,
             StatusText = record.StatusText,
+            Severity = record.Status == InspectionStatus.Abnormal
+                ? AlarmSeverity.Abnormal
+                : AlarmSeverity.Warning,
             ProcessingState = processingState,
             Inspector = record.Inspector,
             Remark = string.IsNullOrWhiteSpace(record.ActionRemark) ? record.Remark : record.ActionRemark
+        };
+    }
+
+    private static AlarmRow ToDeviceAlarmRow(DeviceRowViewModel device)
+    {
+        if (device.Status != ManagedDeviceStatus.Active)
+        {
+            return new AlarmRow
+            {
+                CheckedAt = device.UpdatedAtText,
+                LineName = device.LineName,
+                DeviceName = device.DeviceName,
+                InspectionItem = "设备台账状态",
+                StatusText = device.Status == ManagedDeviceStatus.Stopped ? "已停用" : "维护中",
+                Severity = device.Status == ManagedDeviceStatus.Stopped ? AlarmSeverity.Abnormal : AlarmSeverity.Warning,
+                ProcessingState = "待处理",
+                Inspector = string.IsNullOrWhiteSpace(device.Owner) ? "--" : device.Owner,
+                Remark = "请在设备台账中恢复运行状态或补充维护说明"
+            };
+        }
+
+        return new AlarmRow
+        {
+            CheckedAt = device.UpdatedAtText,
+            LineName = device.LineName,
+            DeviceName = device.DeviceName,
+            InspectionItem = "通信配置",
+            StatusText = "未配通信",
+            Severity = AlarmSeverity.Warning,
+            ProcessingState = "待处理",
+            Inspector = string.IsNullOrWhiteSpace(device.Owner) ? "--" : device.Owner,
+            Remark = "请在设备台账中补充通信地址"
         };
     }
 
@@ -480,9 +539,17 @@ internal sealed class AlarmCenterPageControl : UserControl, IInteractiveResizeAw
         return PageChrome.CreateActionButton("闭环选中告警", DangerColor, false);
     }
 
+    private enum AlarmSeverity
+    {
+        Warning,
+        Abnormal
+    }
+
     private sealed class AlarmRow
     {
-        public Guid RecordId { get; init; }
+        public Guid? RecordId { get; init; }
+
+        public bool CanClose { get; init; }
 
         public string CheckedAt { get; init; } = string.Empty;
 
@@ -493,6 +560,8 @@ internal sealed class AlarmCenterPageControl : UserControl, IInteractiveResizeAw
         public string InspectionItem { get; init; } = string.Empty;
 
         public string StatusText { get; init; } = string.Empty;
+
+        public AlarmSeverity Severity { get; init; }
 
         public string ProcessingState { get; init; } = string.Empty;
 

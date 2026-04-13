@@ -68,7 +68,7 @@ internal sealed class AppCompositionRoot
 
     public MainForm CreateDashboardForm(string account)
     {
-        var dashboardController = new DashboardController(_inspectionRecordService);
+        var dashboardController = new DashboardController(_inspectionRecordService, _managedDeviceService);
         var inspectionController = new InspectionController(
             _inspectionRecordService,
             new InspectionExcelExporter());

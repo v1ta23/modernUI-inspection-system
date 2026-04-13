@@ -352,9 +352,10 @@ internal static class PageChrome
         private readonly TableLayoutPanel _headerLayout;
         private readonly Label _titleLabel;
         private readonly Label _subtitleLabel;
+        private readonly Control? _headerAction;
         private int _lastHeaderWidth = -1;
 
-        public SectionShellPanel(string title, Label subtitleLabel, Control body, Padding margin)
+        public SectionShellPanel(string title, Label subtitleLabel, Control body, Padding margin, Control? headerAction = null)
             : base()
         {
             Dock = DockStyle.Fill;
@@ -365,6 +366,12 @@ internal static class PageChrome
             _titleLabel = CreateTextLabel(title, 11F, FontStyle.Bold, TextPrimary, new Padding(0, 0, 0, 6));
             _subtitleLabel = subtitleLabel;
             _subtitleLabel.Dock = DockStyle.Top;
+            _headerAction = headerAction;
+            if (_headerAction is not null)
+            {
+                _headerAction.Dock = DockStyle.Top;
+                _headerAction.Margin = new Padding(16, 0, 0, 0);
+            }
 
             _headerLayout = new TableLayoutPanel
             {
@@ -372,16 +379,26 @@ internal static class PageChrome
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 Dock = DockStyle.Top,
                 BackColor = Color.Transparent,
-                ColumnCount = 1,
+                ColumnCount = _headerAction is null ? 1 : 2,
                 RowCount = 2,
                 Margin = Padding.Empty,
                 Padding = SectionHeaderPadding
             };
             _headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            if (_headerAction is not null)
+            {
+                _headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            }
+
             _headerLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             _headerLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             _headerLayout.Controls.Add(_titleLabel, 0, 0);
             _headerLayout.Controls.Add(_subtitleLabel, 0, 1);
+            if (_headerAction is not null)
+            {
+                _headerLayout.Controls.Add(_headerAction, 1, 0);
+                _headerLayout.SetRowSpan(_headerAction, 2);
+            }
 
             body.Dock = DockStyle.Fill;
             body.Margin = new Padding(16, 0, 16, 16);
@@ -409,6 +426,12 @@ internal static class PageChrome
         private void UpdateWrapping()
         {
             var headerWidth = Math.Max(160, ClientSize.Width - SectionHeaderPadding.Horizontal - 8);
+            if (_headerAction is not null && _headerAction.Visible)
+            {
+                headerWidth -= _headerAction.GetPreferredSize(Size.Empty).Width + _headerAction.Margin.Horizontal;
+                headerWidth = Math.Max(120, headerWidth);
+            }
+
             if (_lastHeaderWidth == headerWidth)
             {
                 return;
@@ -595,15 +618,26 @@ internal static class PageChrome
         SyncRowHeight(null, EventArgs.Empty);
     }
 
-    internal static ChromePanel CreateSectionShell(string title, string subtitle, out Label subtitleLabel, Control body, Padding? margin = null)
+    internal static ChromePanel CreateSectionShell(
+        string title,
+        string subtitle,
+        out Label subtitleLabel,
+        Control body,
+        Padding? margin = null,
+        Control? headerAction = null)
     {
         subtitleLabel = CreateTextLabel(subtitle, 8.8F, FontStyle.Regular, TextMuted, new Padding(0, 0, 0, 8));
-        return CreateSectionShell(title, subtitleLabel, body, margin);
+        return CreateSectionShell(title, subtitleLabel, body, margin, headerAction);
     }
 
-    internal static ChromePanel CreateSectionShell(string title, Label subtitleLabel, Control body, Padding? margin = null)
+    internal static ChromePanel CreateSectionShell(
+        string title,
+        Label subtitleLabel,
+        Control body,
+        Padding? margin = null,
+        Control? headerAction = null)
     {
-        return new SectionShellPanel(title, subtitleLabel, body, margin ?? SectionMargin);
+        return new SectionShellPanel(title, subtitleLabel, body, margin ?? SectionMargin, headerAction);
     }
 
     internal static ChromePanel CreateMetricCard(string title, Color accentColor, Label valueLabel, Label noteLabel, Padding? margin = null)

@@ -18,6 +18,7 @@ internal sealed class DeviceMonitorPageControl : UserControl, IInteractiveResize
     private static readonly Color DangerColor = PageChrome.AccentRed;
 
     private readonly InspectionController _inspectionController;
+    private readonly DeviceManagementController _deviceManagementController;
     private readonly Label _generatedAtLabel;
     private readonly Control _layoutRoot;
     private readonly InteractiveResizeFreezeController _interactiveResizeController;
@@ -37,9 +38,12 @@ internal sealed class DeviceMonitorPageControl : UserControl, IInteractiveResize
     private IReadOnlyList<DeviceRow> _deviceRows = Array.Empty<DeviceRow>();
     private IReadOnlyList<AttentionRow> _attentionRows = Array.Empty<AttentionRow>();
 
-    public DeviceMonitorPageControl(InspectionController inspectionController)
+    public DeviceMonitorPageControl(
+        InspectionController inspectionController,
+        DeviceManagementController deviceManagementController)
     {
         _inspectionController = inspectionController;
+        _deviceManagementController = deviceManagementController;
         Dock = DockStyle.Fill;
         BackColor = PageBackground;
         Font = new Font("Microsoft YaHei UI", 9F);
@@ -78,44 +82,40 @@ internal sealed class DeviceMonitorPageControl : UserControl, IInteractiveResize
 
     public void RefreshData()
     {
-        var dashboard = _inspectionController.Load(new InspectionFilterViewModel());
-        var records = dashboard.Records
+        var inspectionDashboard = _inspectionController.Load(new InspectionFilterViewModel());
+        var deviceDashboard = _deviceManagementController.Load(new DeviceFilterViewModel());
+        var records = inspectionDashboard.Records
             .Where(record => !record.IsRevoked)
             .OrderByDescending(record => record.CheckedAtValue)
             .ToList();
 
-        _deviceRows = records
-            .GroupBy(record => new { record.LineName, record.DeviceName })
-            .Select(group =>
-            {
-                var latest = group.First();
-                var pendingCount = group.Count(record => record.Status != InspectionStatus.Normal && !record.IsClosed);
-                var abnormalCount = group.Count(record => record.Status == InspectionStatus.Abnormal && !record.IsClosed);
-                var warningCount = group.Count(record => record.Status == InspectionStatus.Warning && !record.IsClosed);
+        var recordsByDevice = records
+            .GroupBy(record => BuildDeviceKey(record.LineName, record.DeviceName))
+            .ToDictionary(group => group.Key, group => group.ToList());
+        var ledgerKeys = deviceDashboard.Devices
+            .Select(device => BuildDeviceKey(device.LineName, device.DeviceName))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-                return new DeviceRow
-                {
-                    LineName = latest.LineName,
-                    DeviceName = latest.DeviceName,
-                    LatestStatus = latest.StatusText,
-                    LatestCheckedAt = latest.CheckedAtValue.ToString("MM-dd HH:mm"),
-                    Inspector = latest.Inspector,
-                    PendingCount = pendingCount,
-                    AttentionLevel = abnormalCount > 0
-                        ? "异常待处理"
-                        : warningCount > 0
-                            ? "预警待确认"
-                            : "状态稳定"
-                };
-            })
-            .OrderByDescending(row => row.PendingCount)
+        var ledgerRows = deviceDashboard.Devices
+            .Select(device =>
+            {
+                recordsByDevice.TryGetValue(BuildDeviceKey(device.LineName, device.DeviceName), out var deviceRecords);
+                return BuildDeviceRow(device, deviceRecords ?? []);
+            });
+        var inspectionOnlyRows = recordsByDevice
+            .Where(pair => !ledgerKeys.Contains(pair.Key))
+            .Select(pair => BuildInspectionOnlyRow(pair.Value));
+
+        _deviceRows = ledgerRows
+            .Concat(inspectionOnlyRows)
+            .OrderBy(row => row.AttentionRank)
+            .ThenByDescending(row => row.PendingCount)
             .ThenBy(row => row.LineName)
             .ThenBy(row => row.DeviceName)
             .ToList();
 
-        _attentionRows = records
+        var inspectionAttentionRows = records
             .Where(record => record.Status != InspectionStatus.Normal && !record.IsClosed)
-            .Take(8)
             .Select(record => new AttentionRow
             {
                 DeviceName = record.DeviceName,
@@ -123,7 +123,14 @@ internal sealed class DeviceMonitorPageControl : UserControl, IInteractiveResize
                 StatusText = record.StatusText,
                 CheckedAt = record.CheckedAtValue.ToString("MM-dd HH:mm"),
                 Detail = $"{record.LineName} / {record.Inspector}"
-            })
+            });
+        var deviceAttentionRows = deviceDashboard.Devices
+            .Where(device => device.Status != ManagedDeviceStatus.Active || string.IsNullOrWhiteSpace(device.CommunicationAddress))
+            .Select(BuildDeviceAttentionRow);
+
+        _attentionRows = deviceAttentionRows
+            .Concat(inspectionAttentionRows)
+            .Take(8)
             .ToList();
 
         var focusRow = _deviceRows.FirstOrDefault(row => row.PendingCount > 0) ?? _deviceRows.FirstOrDefault();
@@ -153,7 +160,7 @@ internal sealed class DeviceMonitorPageControl : UserControl, IInteractiveResize
                 : $"最近巡检时间 {focusRow.LatestCheckedAt}，当前状态稳定。";
         }
 
-        _generatedAtLabel.Text = $"最近刷新 {dashboard.GeneratedAt:yyyy-MM-dd HH:mm:ss}";
+        _generatedAtLabel.Text = $"最近刷新 {DateTime.Now:yyyy-MM-dd HH:mm:ss}";
         _deviceGrid.DataSource = _deviceRows.ToList();
         _attentionGrid.DataSource = _attentionRows.ToList();
         _attentionGrid.Visible = _attentionRows.Count > 0;
@@ -214,7 +221,7 @@ internal sealed class DeviceMonitorPageControl : UserControl, IInteractiveResize
         }
 
         _deviceCountValueLabel = PageChrome.CreateValueLabel();
-        var deviceNoteLabel = PageChrome.CreateNoteLabel("已有巡检记录的设备数");
+        var deviceNoteLabel = PageChrome.CreateNoteLabel("来自设备台账，巡检记录作补充");
 
         _issueDeviceValueLabel = PageChrome.CreateValueLabel(16F);
         _issueDeviceNoteLabel = PageChrome.CreateNoteLabel();
@@ -248,16 +255,18 @@ internal sealed class DeviceMonitorPageControl : UserControl, IInteractiveResize
         _deviceGrid = CreateGrid();
         _deviceGrid.Columns.Add(CreateTextColumn(nameof(DeviceRow.LineName), "产线", 90));
         _deviceGrid.Columns.Add(CreateTextColumn(nameof(DeviceRow.DeviceName), "设备", 160));
-        _deviceGrid.Columns.Add(CreateTextColumn(nameof(DeviceRow.LatestStatus), "最近状态", 90));
+        _deviceGrid.Columns.Add(CreateTextColumn(nameof(DeviceRow.DeviceStatus), "台账状态", 90));
+        _deviceGrid.Columns.Add(CreateTextColumn(nameof(DeviceRow.CommunicationState), "通信", 80));
+        _deviceGrid.Columns.Add(CreateTextColumn(nameof(DeviceRow.LatestStatus), "巡检状态", 90));
         _deviceGrid.Columns.Add(CreateTextColumn(nameof(DeviceRow.AttentionLevel), "关注级别", 120));
         _deviceGrid.Columns.Add(CreateTextColumn(nameof(DeviceRow.PendingCount), "待处理", 70));
         _deviceGrid.Columns.Add(CreateTextColumn(nameof(DeviceRow.LatestCheckedAt), "最近巡检", 150));
-        _deviceGrid.Columns.Add(CreateTextColumn(nameof(DeviceRow.Inspector), "巡检人", 90));
+        _deviceGrid.Columns.Add(CreateTextColumn(nameof(DeviceRow.Owner), "负责人", 90));
         _deviceGrid.CellFormatting += DeviceGridOnCellFormatting;
 
         var devicePanel = PageChrome.CreateSectionShell(
             "设备列表",
-            "展示设备最近状态、关注级别和待处理数量。",
+            "从设备台账出发，叠加巡检、通信和维护状态。",
             out _,
             _deviceGrid,
             new Padding(0, 0, 12, 0));
@@ -339,6 +348,122 @@ internal sealed class DeviceMonitorPageControl : UserControl, IInteractiveResize
         return layout;
     }
 
+    private static DeviceRow BuildDeviceRow(DeviceRowViewModel device, IReadOnlyList<InspectionRecordViewModel> records)
+    {
+        var latest = records.FirstOrDefault();
+        var pendingCount = records.Count(record => record.Status != InspectionStatus.Normal && !record.IsClosed);
+        var abnormalCount = records.Count(record => record.Status == InspectionStatus.Abnormal && !record.IsClosed);
+        var warningCount = records.Count(record => record.Status == InspectionStatus.Warning && !record.IsClosed);
+        var isCommunicationConfigured = !string.IsNullOrWhiteSpace(device.CommunicationAddress);
+        var attentionRank = GetAttentionRank(device.Status, isCommunicationConfigured, abnormalCount, warningCount);
+
+        return new DeviceRow
+        {
+            LineName = device.LineName,
+            DeviceName = device.DeviceName,
+            DeviceStatus = device.StatusText,
+            CommunicationState = isCommunicationConfigured ? "已配置" : "未配置",
+            LatestStatus = latest?.StatusText ?? "暂无巡检",
+            LatestCheckedAt = latest?.CheckedAtValue.ToString("MM-dd HH:mm") ?? "--",
+            Owner = string.IsNullOrWhiteSpace(device.Owner) ? "--" : device.Owner,
+            PendingCount = pendingCount + (attentionRank is >= 2 and <= 4 ? 1 : 0),
+            AttentionRank = attentionRank,
+            AttentionLevel = attentionRank switch
+            {
+                0 => "异常待处理",
+                1 => "预警待确认",
+                2 => "设备已停用",
+                3 => "维护中",
+                4 => "通信未配置",
+                _ => "状态稳定"
+            }
+        };
+    }
+
+    private static DeviceRow BuildInspectionOnlyRow(IReadOnlyList<InspectionRecordViewModel> records)
+    {
+        var latest = records.First();
+        var pendingCount = records.Count(record => record.Status != InspectionStatus.Normal && !record.IsClosed);
+        var abnormalCount = records.Count(record => record.Status == InspectionStatus.Abnormal && !record.IsClosed);
+        var warningCount = records.Count(record => record.Status == InspectionStatus.Warning && !record.IsClosed);
+
+        return new DeviceRow
+        {
+            LineName = latest.LineName,
+            DeviceName = latest.DeviceName,
+            DeviceStatus = "未入台账",
+            CommunicationState = "--",
+            LatestStatus = latest.StatusText,
+            LatestCheckedAt = latest.CheckedAtValue.ToString("MM-dd HH:mm"),
+            Owner = latest.Inspector,
+            PendingCount = pendingCount + (pendingCount == 0 ? 1 : 0),
+            AttentionRank = abnormalCount > 0 ? 0 : warningCount > 0 ? 1 : 5,
+            AttentionLevel = abnormalCount > 0
+                ? "异常待处理"
+                : warningCount > 0
+                    ? "预警待确认"
+                    : "未入台账"
+        };
+    }
+
+    private static AttentionRow BuildDeviceAttentionRow(DeviceRowViewModel device)
+    {
+        if (device.Status != ManagedDeviceStatus.Active)
+        {
+            return new AttentionRow
+            {
+                DeviceName = device.DeviceName,
+                InspectionItem = "设备状态",
+                StatusText = device.Status == ManagedDeviceStatus.Stopped ? "异常" : "预警",
+                CheckedAt = device.UpdatedAtText,
+                Detail = $"{device.LineName} / {device.StatusText} / 台账"
+            };
+        }
+
+        return new AttentionRow
+        {
+            DeviceName = device.DeviceName,
+            InspectionItem = "通信配置",
+            StatusText = "预警",
+            CheckedAt = device.UpdatedAtText,
+            Detail = $"{device.LineName} / 未配置通信地址"
+        };
+    }
+
+    private static int GetAttentionRank(
+        ManagedDeviceStatus status,
+        bool isCommunicationConfigured,
+        int abnormalCount,
+        int warningCount)
+    {
+        if (abnormalCount > 0)
+        {
+            return 0;
+        }
+
+        if (warningCount > 0)
+        {
+            return 1;
+        }
+
+        if (status == ManagedDeviceStatus.Stopped)
+        {
+            return 2;
+        }
+
+        if (status == ManagedDeviceStatus.Maintenance)
+        {
+            return 3;
+        }
+
+        return isCommunicationConfigured ? 5 : 4;
+    }
+
+    private static string BuildDeviceKey(string lineName, string deviceName)
+    {
+        return $"{lineName.Trim()}|{deviceName.Trim()}".ToUpperInvariant();
+    }
+
     private static DataGridViewTextBoxColumn CreateTextColumn(
         string dataPropertyName,
         string headerText,
@@ -357,8 +482,13 @@ internal sealed class DeviceMonitorPageControl : UserControl, IInteractiveResize
 
     private void DeviceGridOnCellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
     {
-        if (_deviceGrid.Columns[e.ColumnIndex].DataPropertyName == nameof(DeviceRow.AttentionLevel) &&
-            e.Value is string text)
+        if (e.Value is not string text)
+        {
+            return;
+        }
+
+        var propertyName = _deviceGrid.Columns[e.ColumnIndex].DataPropertyName;
+        if (propertyName is nameof(DeviceRow.AttentionLevel) or nameof(DeviceRow.DeviceStatus) or nameof(DeviceRow.CommunicationState))
         {
             var cellStyle = e.CellStyle;
             if (cellStyle is null)
@@ -369,7 +499,13 @@ internal sealed class DeviceMonitorPageControl : UserControl, IInteractiveResize
             cellStyle.ForeColor = text switch
             {
                 "异常待处理" => DangerColor,
+                "设备已停用" => DangerColor,
+                "已停用" => DangerColor,
                 "预警待确认" => WarningColor,
+                "维护中" => WarningColor,
+                "通信未配置" => WarningColor,
+                "未配置" => WarningColor,
+                "未入台账" => WarningColor,
                 _ => SuccessColor
             };
         }
@@ -430,15 +566,21 @@ internal sealed class DeviceMonitorPageControl : UserControl, IInteractiveResize
 
         public string DeviceName { get; init; } = string.Empty;
 
+        public string DeviceStatus { get; init; } = string.Empty;
+
+        public string CommunicationState { get; init; } = string.Empty;
+
         public string LatestStatus { get; init; } = string.Empty;
 
         public string AttentionLevel { get; init; } = string.Empty;
+
+        public int AttentionRank { get; init; }
 
         public int PendingCount { get; init; }
 
         public string LatestCheckedAt { get; init; } = string.Empty;
 
-        public string Inspector { get; init; } = string.Empty;
+        public string Owner { get; init; } = string.Empty;
     }
 
     private sealed class AttentionRow

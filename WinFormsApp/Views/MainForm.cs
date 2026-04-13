@@ -401,16 +401,16 @@ namespace WinFormsApp.Views
             _dashboard = dashboardController.Load(account);
             _account = account;
             _accountMenu = CreateAccountMenu();
-            _monitorPage = new DeviceMonitorPageControl(inspectionController)
+            _monitorPage = new DeviceMonitorPageControl(inspectionController, deviceManagementController)
             {
                 Visible = false
             };
-            _alarmPage = new AlarmCenterPageControl(account, inspectionController)
+            _alarmPage = new AlarmCenterPageControl(account, inspectionController, deviceManagementController)
             {
                 Visible = false
             };
             _alarmPage.DataChanged += OnInspectionDataChanged;
-            _inspectionPage = new InspectionPageControl(account, inspectionController)
+            _inspectionPage = new InspectionPageControl(account, inspectionController, deviceManagementController)
             {
                 Visible = false
             };
@@ -419,7 +419,7 @@ namespace WinFormsApp.Views
             {
                 Visible = false
             };
-            _dataInsightPage = new DataInsightPageControl(inspectionController, account)
+            _dataInsightPage = new DataInsightPageControl(inspectionController, deviceManagementController, account)
             {
                 Visible = false
             };
@@ -434,6 +434,7 @@ namespace WinFormsApp.Views
             {
                 Visible = false
             };
+            _deviceManagementPage.DataChanged += OnDeviceDataChanged;
 
             // 基础设置
             this.Text = string.Empty;
@@ -1100,6 +1101,30 @@ namespace WinFormsApp.Views
             }
         }
 
+        private void OnDeviceDataChanged(object? sender, EventArgs e)
+        {
+            ReloadDashboard();
+            if (_deviceManagementPage.Visible)
+            {
+                _deviceManagementPage.RefreshData();
+            }
+
+            if (_inspectionPage.Visible)
+            {
+                _inspectionPage.RefreshData();
+            }
+
+            if (_monitorPage.Visible)
+            {
+                _monitorPage.RefreshData();
+            }
+
+            if (_alarmPage.Visible)
+            {
+                _alarmPage.RefreshData();
+            }
+        }
+
         private void OnDataInsightViewImportedRequested(object? sender, EventArgs e)
         {
             OpenImportedBatchReview(false);
@@ -1396,6 +1421,18 @@ namespace WinFormsApp.Views
                     UpdateNavigationSelection(InspectionSectionIndex);
                     SwitchSection(InspectionSectionIndex);
                     _inspectionPage.StartNewEntryFromHome();
+                    break;
+                case DashboardNavigationTarget.DeviceManagement:
+                    UpdateNavigationSelection(DeviceManagementSectionIndex);
+                    SwitchSection(DeviceManagementSectionIndex);
+                    break;
+                case DashboardNavigationTarget.DeviceMonitor:
+                    UpdateNavigationSelection(MonitorSectionIndex);
+                    SwitchSection(MonitorSectionIndex);
+                    break;
+                case DashboardNavigationTarget.AlarmCenter:
+                    UpdateNavigationSelection(AlarmSectionIndex);
+                    SwitchSection(AlarmSectionIndex);
                     break;
                 case DashboardNavigationTarget.Analytics:
                     UpdateNavigationSelection(AnalyticsSectionIndex);

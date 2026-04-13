@@ -23,6 +23,7 @@ internal sealed class DataInsightPageControl : UserControl, IInteractiveResizeAw
     private static readonly Color AccentRed = PageChrome.AccentRed;
 
     private readonly InspectionController _controller;
+    private readonly DeviceManagementController _deviceManagementController;
     private readonly string _account;
     private readonly Label _generatedAtLabel;
     private readonly Control _layoutRoot;
@@ -49,9 +50,13 @@ internal sealed class DataInsightPageControl : UserControl, IInteractiveResizeAw
     private InspectionImportResultViewModel? _lastImportResult;
     private string? _currentFilePath;
 
-    public DataInsightPageControl(InspectionController controller, string account)
+    public DataInsightPageControl(
+        InspectionController controller,
+        DeviceManagementController deviceManagementController,
+        string account)
     {
         _controller = controller;
+        _deviceManagementController = deviceManagementController;
         _account = account;
 
         Dock = DockStyle.Fill;
@@ -511,6 +516,7 @@ internal sealed class DataInsightPageControl : UserControl, IInteractiveResizeAw
         try
         {
             _lastImportResult = _controller.Import(_currentPreview.Entries, _currentFilePath);
+            _deviceManagementController.EnsureDevicesFromInspection(_currentPreview.Entries);
             _generatedAtLabel.Text = $"最近导入：{_lastImportResult.ImportedAt:yyyy-MM-dd HH:mm:ss}";
             DataChanged?.Invoke(this, EventArgs.Empty);
             RefreshDisplayState();

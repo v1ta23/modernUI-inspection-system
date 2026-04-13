@@ -54,6 +54,39 @@ internal sealed class DeviceManagementController
         _deviceService.Delete(id);
     }
 
+    public int EnsureDevicesFromInspection(IEnumerable<InspectionEntryViewModel> entries)
+    {
+        var dashboard = Load(new DeviceFilterViewModel());
+        var existingKeys = dashboard.Devices
+            .Select(device => BuildDeviceKey(device.LineName, device.DeviceName))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var createdCount = 0;
+
+        foreach (var entry in entries
+                     .Where(entry => !string.IsNullOrWhiteSpace(entry.LineName) && !string.IsNullOrWhiteSpace(entry.DeviceName))
+                     .GroupBy(entry => BuildDeviceKey(entry.LineName, entry.DeviceName), StringComparer.OrdinalIgnoreCase)
+                     .Select(group => group.First()))
+        {
+            if (!existingKeys.Add(BuildDeviceKey(entry.LineName, entry.DeviceName)))
+            {
+                continue;
+            }
+
+            Save(new DeviceEditorViewModel
+            {
+                LineName = entry.LineName,
+                DeviceName = entry.DeviceName,
+                Location = entry.LineName,
+                Owner = entry.Inspector,
+                Status = ManagedDeviceStatus.Active,
+                Remark = "由巡检记录自动加入台账"
+            });
+            createdCount++;
+        }
+
+        return createdCount;
+    }
+
     private static DeviceRowViewModel ToRow(ManagedDevice device)
     {
         return new DeviceRowViewModel
@@ -70,5 +103,10 @@ internal sealed class DeviceManagementController
             UpdatedAtText = device.UpdatedAt.ToString("MM-dd HH:mm"),
             Remark = device.Remark
         };
+    }
+
+    private static string BuildDeviceKey(string lineName, string deviceName)
+    {
+        return $"{lineName.Trim()}|{deviceName.Trim()}".ToUpperInvariant();
     }
 }

@@ -8,10 +8,14 @@ namespace WinFormsApp.Controllers;
 internal sealed class DashboardController
 {
     private readonly IInspectionRecordService _inspectionRecordService;
+    private readonly IManagedDeviceService _managedDeviceService;
 
-    public DashboardController(IInspectionRecordService inspectionRecordService)
+    public DashboardController(
+        IInspectionRecordService inspectionRecordService,
+        IManagedDeviceService managedDeviceService)
     {
         _inspectionRecordService = inspectionRecordService;
+        _managedDeviceService = managedDeviceService;
     }
 
     public DashboardViewModel Load(string account)
@@ -37,10 +41,19 @@ internal sealed class DashboardController
         var pendingRecords = records
             .Where(record => record.Status != InspectionStatus.Normal && !record.ClosedAt.HasValue)
             .ToList();
-        var pendingAbnormalCount = pendingRecords.Count(record => record.Status == InspectionStatus.Abnormal);
+        var deviceResult = _managedDeviceService.Query(new ManagedDeviceQuery(
+            string.Empty,
+            string.Empty,
+            null));
+        var devices = deviceResult.Devices;
+        var deviceAttentionCount = devices.Count(device =>
+            device.Status != ManagedDeviceStatus.Active ||
+            string.IsNullOrWhiteSpace(device.CommunicationAddress));
+        var maintenanceDeviceCount = devices.Count(device => device.Status == ManagedDeviceStatus.Maintenance);
+        var stoppedDeviceCount = devices.Count(device => device.Status == ManagedDeviceStatus.Stopped);
+        var activeDeviceCount = devices.Count(device => device.Status == ManagedDeviceStatus.Active);
         var todayNormalCount = todayRecords.Count(record => record.Status == InspectionStatus.Normal);
         var todayWarningCount = todayRecords.Count(record => record.Status == InspectionStatus.Warning);
-        var todayAbnormalCount = todayRecords.Count(record => record.Status == InspectionStatus.Abnormal);
         var todayPassRate = todayRecords.Count == 0
             ? 0m
             : Math.Round(todayNormalCount * 100m / todayRecords.Count, 1);
@@ -48,7 +61,7 @@ internal sealed class DashboardController
         return new DashboardViewModel
         {
             HeaderTitle = "首页",
-            HeaderSubtitle = $"今日巡检 {todayRecords.Count} 条，待闭环 {pendingRecords.Count} 条。",
+            HeaderSubtitle = $"今日巡检 {todayRecords.Count} 条，设备台账 {devices.Count} 台，待处理 {pendingRecords.Count + deviceAttentionCount} 项。",
             Cards =
             [
                 new DashboardCardViewModel
@@ -62,21 +75,21 @@ internal sealed class DashboardController
                 },
                 new DashboardCardViewModel
                 {
-                    Title = "待闭环",
-                    Value = pendingRecords.Count.ToString(),
-                    Detail = $"异常 {pendingAbnormalCount} 条待处理",
-                    Icon = "闭环",
-                    AccentColor = MapAccent("orange"),
-                    NavigationTarget = DashboardNavigationTarget.InspectionPending
+                    Title = "设备台账",
+                    Value = devices.Count.ToString(),
+                    Detail = $"运行 {activeDeviceCount} / 维护 {maintenanceDeviceCount} / 停用 {stoppedDeviceCount}",
+                    Icon = "设备",
+                    AccentColor = MapAccent("cyan"),
+                    NavigationTarget = DashboardNavigationTarget.DeviceManagement
                 },
                 new DashboardCardViewModel
                 {
-                    Title = "今日异常",
-                    Value = todayAbnormalCount.ToString(),
-                    Detail = $"预警 {todayWarningCount} 条",
-                    Icon = "异常",
+                    Title = "待处理告警",
+                    Value = (pendingRecords.Count + deviceAttentionCount).ToString(),
+                    Detail = $"巡检 {pendingRecords.Count} / 设备 {deviceAttentionCount}",
+                    Icon = "告警",
                     AccentColor = MapAccent("pink"),
-                    NavigationTarget = DashboardNavigationTarget.InspectionAbnormal
+                    NavigationTarget = DashboardNavigationTarget.AlarmCenter
                 },
                 new DashboardCardViewModel
                 {
@@ -124,27 +137,27 @@ internal sealed class DashboardController
                 },
                 new DashboardQuickActionViewModel
                 {
-                    Text = "处理待闭环",
-                    Icon = "闭环",
-                    PrimaryAccent = MapAccent("orange"),
-                    SecondaryAccent = MapAccent("pink"),
-                    NavigationTarget = DashboardNavigationTarget.InspectionPending
+                    Text = "设备台账",
+                    Icon = "台账",
+                    PrimaryAccent = MapAccent("cyan"),
+                    SecondaryAccent = MapAccent("blue"),
+                    NavigationTarget = DashboardNavigationTarget.DeviceManagement
                 },
                 new DashboardQuickActionViewModel
                 {
-                    Text = "查看异常",
-                    Icon = "异常",
-                    PrimaryAccent = MapAccent("pink"),
-                    SecondaryAccent = MapAccent("purple"),
-                    NavigationTarget = DashboardNavigationTarget.InspectionAbnormal
-                },
-                new DashboardQuickActionViewModel
-                {
-                    Text = "统计分析",
-                    Icon = "统计",
+                    Text = "设备监控",
+                    Icon = "监控",
                     PrimaryAccent = MapAccent("green"),
                     SecondaryAccent = MapAccent("cyan"),
-                    NavigationTarget = DashboardNavigationTarget.Analytics
+                    NavigationTarget = DashboardNavigationTarget.DeviceMonitor
+                },
+                new DashboardQuickActionViewModel
+                {
+                    Text = "处理告警",
+                    Icon = "告警",
+                    PrimaryAccent = MapAccent("orange"),
+                    SecondaryAccent = MapAccent("pink"),
+                    NavigationTarget = DashboardNavigationTarget.AlarmCenter
                 }
             ]
         };
