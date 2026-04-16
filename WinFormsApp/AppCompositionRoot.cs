@@ -1,3 +1,4 @@
+using System.Text.Json;
 using App.Core.Interfaces;
 using App.Core.Services;
 using App.Infrastructure.Config;
@@ -10,6 +11,9 @@ namespace WinFormsApp;
 
 internal sealed class AppCompositionRoot
 {
+    private const string DefaultConnectionString =
+        "Server=localhost;Database=TestDB;Trusted_Connection=True;TrustServerCertificate=True;";
+
     private readonly IAuthenticationService _authenticationService;
     private readonly IInspectionRecordService _inspectionRecordService;
     private readonly IManagedDeviceService _managedDeviceService;
@@ -18,7 +22,7 @@ internal sealed class AppCompositionRoot
     {
         var sqlOptions = new SqlServerOptions
         {
-            ConnectionString = "Server=localhost;Database=TestDB;Trusted_Connection=True;TrustServerCertificate=True;"
+            ConnectionString = LoadConnectionString()
         };
 
         var rememberMePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "remember.txt");
@@ -135,5 +139,35 @@ internal sealed class AppCompositionRoot
         }
 
         targetRepository.SaveAll(legacyDevices);
+    }
+
+    private static string LoadConnectionString()
+    {
+        var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
+        if (!File.Exists(configPath))
+        {
+            return DefaultConnectionString;
+        }
+
+        using var stream = File.OpenRead(configPath);
+        var settings = JsonSerializer.Deserialize<AppSettings>(stream, new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        });
+
+        var connectionString = settings?.SqlServer?.ConnectionString;
+        return string.IsNullOrWhiteSpace(connectionString)
+            ? DefaultConnectionString
+            : connectionString;
+    }
+
+    private sealed class AppSettings
+    {
+        public SqlServerSettings? SqlServer { get; init; } = new();
+    }
+
+    private sealed class SqlServerSettings
+    {
+        public string ConnectionString { get; init; } = string.Empty;
     }
 }
